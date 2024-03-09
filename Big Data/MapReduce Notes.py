@@ -1,2 +1,2 @@
- ###TODO: DUDAS AL PROFE: 
-# * ¿Porque la variable factor? 
+###TODO: DUDAS AL PROFE:
+# * ¿Porque la variable factor?
