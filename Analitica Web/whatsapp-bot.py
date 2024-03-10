@@ -5,16 +5,19 @@ application_id = "1201563077372563618"
 
 client = discord.Client()
 
+
 @client.event
 async def on_ready():
-    print(f'We have logged in as {client.user}')
+    print(f"We have logged in as {client.user}")
+
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith('$hello'):
-        await message.channel.send('Hello!')
+    if message.content.startswith("$hello"):
+        await message.channel.send("Hello!")
 
-client.run('your token here')
+
+client.run("your token here")

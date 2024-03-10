@@ -9,10 +9,10 @@ import seaborn
 import requests
 from io import BytesIO
 
-path = './yeastData310.mat'
+path = "./yeastData310.mat"
 data = scipy.io.loadmat(path)
 
-X = data['X']
+X = data["X"]
 
 # corrDist = pdist(X, 'correlation')
 # clusterTree = AgglomerativeClustering(n_clusters=16, linkage='single', metric='cityblock')
@@ -28,6 +28,6 @@ X = data['X']
 #     col = c%4
 #     for occ in occurences:
 #         axes[row][col].plot(times, X[occ, :].reshape(7,))
-    
+
 # plt.tight_layout(rect=[0, 0, 1, 0.90])
 # plt.show()
