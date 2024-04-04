@@ -1,32 +1,33 @@
-# * We can force specific classess to be implemented like: 
+# * We can force specific classess to be implemented like:
 
-import random 
+import random
 from abc import ABC, abstractmethod
 
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
-class Shape(ABC): 
-    def __init__(self, window, shapeType, maxWidth, maxHeight): 
-        self.window = window 
+
+class Shape(ABC):
+    def __init__(self, window, shapeType, maxWidth, maxHeight):
+        self.window = window
         self.shapeType = shapeType
         self.color = random.choice((RED, GREEN, BLUE))
         self.x = random.randrange(1, maxWidth - 100)
         self.y = random.randrange(1, maxHeight - 100)
 
-    def getType(self): 
+    def getType(self):
         return self.shapeType
-    
+
     # * This is a way to force the shapes to get it
     @abstractmethod
-    def clickedInside(self, mousePoint): 
+    def clickedInside(self, mousePoint):
         raise NotImplementedError
-    
+
     @abstractmethod
-    def getArea(self): 
+    def getArea(self):
         raise NotImplementedError
-    
+
     @abstractmethod
-    def draw(self): 
+    def draw(self):
         raise NotImplementedError
