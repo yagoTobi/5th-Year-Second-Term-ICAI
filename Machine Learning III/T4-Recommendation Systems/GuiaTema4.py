@@ -1,4 +1,3 @@
-
 # * ################################################################################################
 # * ##############     Handy Guide ICAI - MACHINE LEARNING III   - Yago Tobio Souto  ###############
 # * ################################################################################################
@@ -6,7 +5,7 @@
 # * Librerias
 import os
 import sys
-import math 
+import math
 import cornac
 import operator
 import itertools
@@ -59,19 +58,19 @@ df_sample = df.sample(n=10000, random_state=42)
 # ? Based on cosine similarity or pearson correlation and taking the avg. of ratings.
 # ? Non-scalable for sparse data.
 
-#* #######################################################################################
-#* #######################################################################################
-#* #######################################################################################
-#* ### Indice (Collaborative Filtering techniques)                                    ####
-#* ### 1. Memory-Based Filtering                  (Linea XX)                          ####
-#* ###    a. User-Based Filtering                 (Linea XX)                          ####
-#* ###    b. Item-Based Filtering                 (Linea XXX)                         ####
-#* ### 2. Model-Based Collaborative Filtering                                         ####
-#* ###    a. Matrix Factorisation                                                     ####
-#* ###    b. Singular Value Decomposition                                             ####
-#* #######################################################################################
-#* #######################################################################################
-#* #######################################################################################
+# * #######################################################################################
+# * #######################################################################################
+# * #######################################################################################
+# * ### Indice (Collaborative Filtering techniques)                                    ####
+# * ### 1. Memory-Based Filtering                  (Linea XX)                          ####
+# * ###    a. User-Based Filtering                 (Linea XX)                          ####
+# * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
+# * ### 2. Model-Based Collaborative Filtering                                         ####
+# * ###    a. Matrix Factorisation                                                     ####
+# * ###    b. Singular Value Decomposition                                             ####
+# * #######################################################################################
+# * #######################################################################################
+# * #######################################################################################
 
 # ? - Content-Based Filtering
 """
@@ -213,7 +212,7 @@ picked_userid_watched = (
 
 picked_userid_watched.head()
 
-#?####################### SINGLE ITEM EXAMPLE ##############################################
+# ?####################### SINGLE ITEM EXAMPLE ##############################################
 # ? Getting the similarity score for a specific movie using Pearson
 item_similarity_p = normalized_ratings_matrix.T.corr()
 item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
@@ -238,12 +237,12 @@ picked_userid_watched_similarity = pd.merge(
 # ? - In case of the item_based_example, we can see that the similarity score tell us, that they are completely uncorrelated.
 # ? - After detecting the similarity score for each specific film with respect to the others, the higher similarity movies get more weight.
 # ? - This weighted average is the predicted rating for American Pie by user 1.
-predicted_item_rating = round( 
+predicted_item_rating = round(
     # * So what this essentially does, is compute the average of the ratings
-    # * However the average is weighted by how similar the films are. Why is that? 
-    # * This is because more similar films will be closer, so this is a pseudo-approximation. 
+    # * However the average is weighted by how similar the films are. Why is that?
+    # * This is because more similar films will be closer, so this is a pseudo-approximation.
     np.average(
-        picked_userid_watched_similarity["rating"], 
+        picked_userid_watched_similarity["rating"],
         weights=picked_userid_watched_similarity["similarity_score"],
     ),
     6,  # * Number of decimals
@@ -253,122 +252,131 @@ predicted_item_rating = round(
 print(
     f"The predicted rating for {picked_movie} by user {picked_userid} is {predicted_item_rating}"
 )
-#?########################?########################?########################?########################?#######################
+# ?########################?########################?########################?########################?#######################
 
-# * Now we create a function, with follows four steps: 
-# ? - Create a list of movies which the user hasn't watched before. 
+
+# * Now we create a function, with follows four steps:
+# ? - Create a list of movies which the user hasn't watched before.
 # ? - Loop through this list of movies, and create a predicted score for each of these
-# ? - Sort them with the predicted scores first. 
-# ? - Select the top k movies as recommendations for the target user. 
+# ? - Sort them with the predicted scores first.
+# ? - Select the top k movies as recommendations for the target user.
 def item_based_rec(
     picked_userid=1, number_of_similar_items=5, number_of_recommendations=3
 ):
     picked_userid_unwatched = pd.DataFrame(
-        normalized_ratings_matrix[picked_userid].isna() # ? - Get the unwatched movies
+        normalized_ratings_matrix[picked_userid].isna()  # ? - Get the unwatched movies
     ).reset_index()
 
     # ? - From the dataset of the unwatched films just get the first column
     picked_userid_unwatched = picked_userid_unwatched[
         picked_userid_unwatched[1] == True
-    ]['title'].values.tolist()
+    ]["title"].values.tolist()
 
-    # ? - Movies which the user has watched 
+    # ? - Movies which the user has watched
     picked_userid_watched = (
         pd.DataFrame(
             normalized_ratings_matrix[picked_userid]
-            .dropna(axis = 0, how='all')
+            .dropna(axis=0, how="all")
             .sort_values(ascending=False)
         )
         .reset_index()
-        .rename(columns = {1: 'rating'}) # ? Rename the second column to get the rating. 
+        .rename(columns={1: "rating"})  # ? Rename the second column to get the rating.
     )
 
-    # ? - Dictionary to save the unwatched movie and predicted rating pair 
+    # ? - Dictionary to save the unwatched movie and predicted rating pair
     rating_prediction = {}
 
-    # * Calculate the similarity score of an indiv. movie with the list. 
-    for movie in picked_userid_unwatched: 
+    # * Calculate the similarity score of an indiv. movie with the list.
+    for movie in picked_userid_unwatched:
         picked_movie_similarity_score = (
             item_similarity_p[[movie]]
             .reset_index()
-            .rename(columns={picked_movie: 'similarity_score'})
+            .rename(columns={picked_movie: "similarity_score"})
         )
 
         picked_userid_watched_similarity = pd.merge(
-            left = picked_userid_watched, 
-            right = picked_movie_similarity_score, 
-            on = 'title', 
-            how = 'inner'
-        ).sort_values('similarity_score', ascending=False)[:number_of_similar_items]
+            left=picked_userid_watched,
+            right=picked_movie_similarity_score,
+            on="title",
+            how="inner",
+        ).sort_values("similarity_score", ascending=False)[:number_of_similar_items]
 
         # ? - Calculate the predicted rating using weighted average of similarity scores
-        # ? - and the user 1 ratings 
+        # ? - and the user 1 ratings
         predicted_rating = round(
             np.average(
-                picked_userid_watched_similarity['rating'], 
-                weights=picked_userid_watched_similarity['similarity_score'],
-            ), 
-            6, 
+                picked_userid_watched_similarity["rating"],
+                weights=picked_userid_watched_similarity["similarity_score"],
+            ),
+            6,
         )
-        # ? Save the predicted rating in the dictionary 
+        # ? Save the predicted rating in the dictionary
         rating_prediction[picked_movie] = predicted_rating
     # ? - The key=operator.itemgetter(1), just tells the sorted function to get the rating_prediction second column in desc. order
-    return sorted(rating_prediction.items(), key=operator.itemgetter(1), reverse=True)[:number_of_recommendations]
+    return sorted(rating_prediction.items(), key=operator.itemgetter(1), reverse=True)[
+        :number_of_recommendations
+    ]
 
-# ! - Model-based collaborative filtering techniques:  
+
+# ! - Model-based collaborative filtering techniques:
 
 # * Proceed with the steps to obtain the ratings matrix
-mean_rating = 2.5 
-r_df = ratings_df.pivot(index = 'userId', columns= 'movieId', values='rating').fillna(mean_rating)
+mean_rating = 2.5
+r_df = ratings_df.pivot(index="userId", columns="movieId", values="rating").fillna(
+    mean_rating
+)
 
-# ? - Pass the dataframe into a numpy df 
+# ? - Pass the dataframe into a numpy df
 r = r_df.to_numpy()
 
-# ? - Center the ratings by subtracting the overall mean of the matrix 
-user_ratings_mean = np.mean(r, axis = 1)
-r_centered = r - user_ratings_mean.reshape(-1,1)
-print(r.shape) # * Returns dimension 
-print(np.count_nonzero(r)) # * This returns the nonzero elements -> Check that all elements are filled in. 
+# ? - Center the ratings by subtracting the overall mean of the matrix
+user_ratings_mean = np.mean(r, axis=1)
+r_centered = r - user_ratings_mean.reshape(-1, 1)
+print(r.shape)  # * Returns dimension
+print(
+    np.count_nonzero(r)
+)  # * This returns the nonzero elements -> Check that all elements are filled in.
 
-#! - Singular Value Decomp
+#! - Singular Value Decomp - Normal
 # * Split a the mxn matrix into 3 (Rotation, recaling (+/-), rotation)
 # * Expressed as M = U * Sigma * V^T
 # *     U (mxm) -> Orthonormal columns
-# *     Sigma (mxn) -> Diagonal values 
+# *     Sigma (mxn) -> Diagonal values
 # *     V (nxn) -> Orthonomal columns
-# * It wouldn't be machine learning if there was no optimisation problem -> In this case it would be matrix completion. 
-# TODO - Consider that you may get more than one table 
+# * It wouldn't be machine learning if there was no optimisation problem -> In this case it would be matrix completion.
+# TODO - Consider that you may get more than one table
 
 # ? - Σ is a diagonal matrix containing the singular values in descending order.
-u, sigma, v_T = svds(r_centered, k = 50) # Limit to the top 50 components
+u, sigma, v_T = svds(r_centered, k=50)  # Limit to the top 50 components
 sigma = np.diag(sigma)
-matrix_rank(r_centered) # * To assess the max. number of latent vectors. 
+matrix_rank(r_centered)  # * To assess the max. number of latent vectors.
 
 # ? - Escogemos el número optimo de latent spaces para el minimo error.
 latents = [3, 10, 20, 30, 40, 50, 150, 300]
 rmse_errors = []
-for latent_dim in latents: 
-    U, sigma, v_T = svds(r_centered, k = latent_dim)
-    sigma = np.diag(sigma) # ? Force it to be diagonal 
-    # ? - Reconstruction of the matrix y_app = U*Sigma*Vt + user_mean (We could also add the item mean) 
+for latent_dim in latents:
+    U, sigma, v_T = svds(r_centered, k=latent_dim)
+    sigma = np.diag(sigma)  # ? Force it to be diagonal
+    # ? - Reconstruction of the matrix y_app = U*Sigma*Vt + user_mean (We could also add the item mean)
     r_pred = np.dot(np.dot(U, sigma), v_T) + user_ratings_mean.reshape(-1, 1)
     r_pred[r_pred < 0] = 0
     r_pred[r_pred > 5] = 5
-    mse = np.square(np.subtract(r, r_pred)).mean # ? - MSE formula 
+    mse = np.square(np.subtract(r, r_pred)).mean  # ? - MSE formula
     rmse = math.sqrt(mse)
-    rmse_errors.append(rmse) # * Add it to the list 
+    rmse_errors.append(rmse)  # * Add it to the list
 
 # ? - Plot opcional para observar como progresa el SVD
-# ? - Hacemos ahí un elbow method supongo. 
-#TODO: Determinar si se debe de escoger un threshold 
-plt.xlabel('Latent Dimension')
-plt.ylabel('RMSE')
-plt.plot(latents, rmse_errors, 'o-')
+# ? - Hacemos ahí un elbow method supongo.
+# TODO: Determinar si se debe de escoger un threshold
+plt.xlabel("Latent Dimension")
+plt.ylabel("RMSE")
+plt.plot(latents, rmse_errors, "o-")
 plt.show()
 
 r_pred_df = pd.DataFrame(r_pred)
 r_pred.head()
 
+# * Ways to get all of the recommendations at once by constructing the full matrix
 # Y = U Sigma Vt + mean
 all_user_predicted_ratings = np.dot(np.dot(u, sigma), v_T) + user_ratings_mean.reshape(
     -1, 1
@@ -381,10 +389,51 @@ preds_df = pd.DataFrame(all_user_predicted_ratings, columns=r_df.columns)
 preds_df.head()
 
 
+# * Function to recommend movies per user.
+# ? - How it works is returning the movies with the highest predicted rating.
+# ? - Consider only the user rating, no title, no genre.
+# TODO - How would we consider more information/other tables.
+def recommend_movies(
+    preds_df, userID, movies_df, original_ratings_df, num_recommendations=5
+):
+    # ? Get the user and their predictions
+    user_row_num = userID - 1
+    sorted_user_predictions = preds_df.iloc[user_row_num].sort_values(ascending=False)
+
+    # ? Get the user's data and merge in the movie info to display: 
+    user_data = original_ratings_df[original_ratings_df.userId == (userID)]
+    user_full = user_data.merge(
+        movies_df, how='left', left_on='movieId', right_on='movieId'
+    ).sort_values(['rating'], ascending = False)
+
+    print(f"User {userID} has already rated {user_full.shape[0]} movies.")
+    print(
+        f"Recommending highest {num_recommendations} predicted ratings movies not already rated."
+    )
+
+    # Recommend the highest predicted rating movies that the user hasn't seen yet.
+    recommendations = (
+        # TODO -  What are we doing here?
+        movies_df[~movies_df["movieId"].isin(user_full["movieId"])]
+        .merge(
+            pd.DataFrame(sorted_user_predictions).reset_index(),
+            how="left",
+            left_on="movieId",
+            right_on="movieId",
+        )
+        .rename(columns={user_row_num: "Predictions"})
+        .sort_values("Predictions", ascending=False)
+        .iloc[:num_recommendations, :-1]
+    )
+
+    return user_full, recommendations
+
+#! - Singular Value Decomp - Cornac
+
 
 # ? - Examinar el nivel de error para el número de latentes en la matriz
-# ! - Matrix Factorisation 
+# ! - Matrix Factorisation
 # * Factorises the ratings matrix into the product of two lower-rank matrices. "Capturing the low-rank structure of the user-item interactions".
 # * Y (mxn) => P (mxk) & Q (nxk), where k << m, n is the latent factor size. So Y approx PQ^T
-# * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars. 
-# * Q is the item matrix (n -> # of items) -> Rows measure item characteristics set. 
+# * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars.
+# * Q is the item matrix (n -> # of items) -> Rows measure item characteristics set.
