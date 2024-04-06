@@ -4,15 +4,31 @@
 # * ################################################################################################
 
 # * Librerias
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import scipy.stats
-import seaborn as sns
+import os
+import sys
+import math 
+import cornac
 import operator
+import itertools
+import scipy.stats
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import scipy.sparse as sp
+import matplotlib.pyplot as plt
 
-from sklearn.metrics.pairwise import cosine_similarity
+from cornac.utils import cache
+from adjustText import adjust_text
+from scipy.sparse.linalg import svds
+from numpy.linalg import matrix_rank
+from cornac.datasets import movielens
+from cornac.eval_methods import RatioSplit
 from sklearn.metrics import mean_squared_error
+from cornac.models import MF, NMF, BaselineOnly
+from sklearn.metrics.pairwise import cosine_similarity
+
+SEED = 42
+VERBOSE = False
 
 # * Import file
 df_path = "df_path"
@@ -37,7 +53,7 @@ df_sample = df.sample(n=10000, random_state=42)
 # ! Recommender systems:
 # ? - Collaborative Filtering <- WE ARE INTERESTED IN THIS ONE
 # * - Model-based filtering technique <- Clustering, NN, Association, etc...
-# ? Use ML to find user ratings of unrated items: PCA SVD, Neural nets
+# ? Use ML to find user ratings of unrated items: PCA, SVD, Neural nets
 # ? Performance reduction with sparse data.
 # * - Memory-based filtering technique  <- User Based / Item Based <- THIS ONE FOR THE PRACTICAL
 # ? Based on cosine similarity or pearson correlation and taking the avg. of ratings.
@@ -51,10 +67,11 @@ df_sample = df.sample(n=10000, random_state=42)
 #* ###    a. User-Based Filtering                 (Linea XX)                          ####
 #* ###    b. Item-Based Filtering                 (Linea XXX)                         ####
 #* ### 2. Model-Based Collaborative Filtering                                         ####
+#* ###    a. Matrix Factorisation                                                     ####
+#* ###    b. Singular Value Decomposition                                             ####
 #* #######################################################################################
 #* #######################################################################################
 #* #######################################################################################
-
 
 # ? - Content-Based Filtering
 """
@@ -298,4 +315,76 @@ def item_based_rec(
     # ? - The key=operator.itemgetter(1), just tells the sorted function to get the rating_prediction second column in desc. order
     return sorted(rating_prediction.items(), key=operator.itemgetter(1), reverse=True)[:number_of_recommendations]
 
-# ! - 
+# ! - Model-based collaborative filtering techniques:  
+
+# * Proceed with the steps to obtain the ratings matrix
+mean_rating = 2.5 
+r_df = ratings_df.pivot(index = 'userId', columns= 'movieId', values='rating').fillna(mean_rating)
+
+# ? - Pass the dataframe into a numpy df 
+r = r_df.to_numpy()
+
+# ? - Center the ratings by subtracting the overall mean of the matrix 
+user_ratings_mean = np.mean(r, axis = 1)
+r_centered = r - user_ratings_mean.reshape(-1,1)
+print(r.shape) # * Returns dimension 
+print(np.count_nonzero(r)) # * This returns the nonzero elements -> Check that all elements are filled in. 
+
+#! - Singular Value Decomp
+# * Split a the mxn matrix into 3 (Rotation, recaling (+/-), rotation)
+# * Expressed as M = U * Sigma * V^T
+# *     U (mxm) -> Orthonormal columns
+# *     Sigma (mxn) -> Diagonal values 
+# *     V (nxn) -> Orthonomal columns
+# * It wouldn't be machine learning if there was no optimisation problem -> In this case it would be matrix completion. 
+# TODO - Consider that you may get more than one table 
+
+# ? - Σ is a diagonal matrix containing the singular values in descending order.
+u, sigma, v_T = svds(r_centered, k = 50) # Limit to the top 50 components
+sigma = np.diag(sigma)
+matrix_rank(r_centered) # * To assess the max. number of latent vectors. 
+
+# ? - Escogemos el número optimo de latent spaces para el minimo error.
+latents = [3, 10, 20, 30, 40, 50, 150, 300]
+rmse_errors = []
+for latent_dim in latents: 
+    U, sigma, v_T = svds(r_centered, k = latent_dim)
+    sigma = np.diag(sigma) # ? Force it to be diagonal 
+    # ? - Reconstruction of the matrix y_app = U*Sigma*Vt + user_mean (We could also add the item mean) 
+    r_pred = np.dot(np.dot(U, sigma), v_T) + user_ratings_mean.reshape(-1, 1)
+    r_pred[r_pred < 0] = 0
+    r_pred[r_pred > 5] = 5
+    mse = np.square(np.subtract(r, r_pred)).mean # ? - MSE formula 
+    rmse = math.sqrt(mse)
+    rmse_errors.append(rmse) # * Add it to the list 
+
+# ? - Plot opcional para observar como progresa el SVD
+# ? - Hacemos ahí un elbow method supongo. 
+#TODO: Determinar si se debe de escoger un threshold 
+plt.xlabel('Latent Dimension')
+plt.ylabel('RMSE')
+plt.plot(latents, rmse_errors, 'o-')
+plt.show()
+
+r_pred_df = pd.DataFrame(r_pred)
+r_pred.head()
+
+# Y = U Sigma Vt + mean
+all_user_predicted_ratings = np.dot(np.dot(u, sigma), v_T) + user_ratings_mean.reshape(
+    -1, 1
+)
+
+all_user_predicted_ratings[all_user_predicted_ratings < 0] = 0
+all_user_predicted_ratings[all_user_predicted_ratings > 5] = 5
+
+preds_df = pd.DataFrame(all_user_predicted_ratings, columns=r_df.columns)
+preds_df.head()
+
+
+
+# ? - Examinar el nivel de error para el número de latentes en la matriz
+# ! - Matrix Factorisation 
+# * Factorises the ratings matrix into the product of two lower-rank matrices. "Capturing the low-rank structure of the user-item interactions".
+# * Y (mxn) => P (mxk) & Q (nxk), where k << m, n is the latent factor size. So Y approx PQ^T
+# * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars. 
+# * Q is the item matrix (n -> # of items) -> Rows measure item characteristics set. 
