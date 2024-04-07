@@ -90,6 +90,7 @@ train_df = pd.read_csv(
     header=None,
     names=["user_id", "item_id", "rating", "timestamp"],
 )
+
 test_df = pd.read_csv(
     "ml-100k/u1.test",
     sep="\t",
@@ -116,6 +117,7 @@ similarity_matrix = (
 # ? - Case 2. Cosine similarity (WE WOULD NOW HAVE TO IMPUTE THE MISSING DATA -> Most common method: Fill in with the user or item average rating)
 # ?           We can proceed with this as long as all of the items have been normalised first.
 # ? - If we want to fill it in with zeroes:
+# TODO: Pregunta a Valle hecha - No ha respondido
 item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
 item_similarity_cosine = cosine_similarity(
     normalized_ratings_matrix.fillna(ratings_matrix.T.mean()[user_id])  # type:ignore
@@ -319,7 +321,6 @@ def item_based_rec(
 
 
 # ! - Model-based collaborative filtering techniques:
-
 # * Proceed with the steps to obtain the ratings matrix
 mean_rating = 2.5
 r_df = ratings_df.pivot(index="userId", columns="movieId", values="rating").fillna(
@@ -400,11 +401,11 @@ def recommend_movies(
     user_row_num = userID - 1
     sorted_user_predictions = preds_df.iloc[user_row_num].sort_values(ascending=False)
 
-    # ? Get the user's data and merge in the movie info to display: 
+    # ? Get the user's data and merge in the movie info to display:
     user_data = original_ratings_df[original_ratings_df.userId == (userID)]
     user_full = user_data.merge(
-        movies_df, how='left', left_on='movieId', right_on='movieId'
-    ).sort_values(['rating'], ascending = False)
+        movies_df, how="left", left_on="movieId", right_on="movieId"
+    ).sort_values(["rating"], ascending=False)
 
     print(f"User {userID} has already rated {user_full.shape[0]} movies.")
     print(
@@ -413,9 +414,10 @@ def recommend_movies(
 
     # Recommend the highest predicted rating movies that the user hasn't seen yet.
     recommendations = (
-        # TODO -  What are we doing here?
+        # ? - Get the films which the user hasn't rated yet and we merge it with the prediction tables.
         movies_df[~movies_df["movieId"].isin(user_full["movieId"])]
         .merge(
+            # ? - and we merge it with the prediction tables.
             pd.DataFrame(sorted_user_predictions).reset_index(),
             how="left",
             left_on="movieId",
@@ -423,17 +425,215 @@ def recommend_movies(
         )
         .rename(columns={user_row_num: "Predictions"})
         .sort_values("Predictions", ascending=False)
-        .iloc[:num_recommendations, :-1]
+        .iloc[
+            :num_recommendations, :-1
+        ]  # ? - iloc for rows, choosing the highest ones, after sorting
     )
 
     return user_full, recommendations
 
-#! - Singular Value Decomp - Cornac
 
+already_rated, predictions = recommend_movies(preds_df, 29, movies_df, ratings_df)
+df = already_rated[["movieId", "title", "genres"]].copy()
+# df.head(5)
+predictions.head(5)
+
+#! - Singular Value Decomp - Cornac
+#! - Careful with CORNAC, it only accepts its own type of data:
+
+sample_df = pd.read_csv("csv_path")
+dataset = cornac.data.Dataset.from_uir(sample_df.itertuples(index=False))
 
 # ? - Examinar el nivel de error para el número de latentes en la matriz
+# ? - La libreriía Cormac Automáticamente nos lo transforma a una matriz
+ratings = dataset.matrix.A
+user_ratings_mean = np.mean(ratings, axis=1)
+ratings_mask = (ratings > 0).astype(float)  # ? - To make them decimals
+
+pd.DataFrame(
+    data=ratings,
+    index=[f"User {u+1}" for u in np.arange(dataset.num_users)],
+    columns=[f"Item {i+1}" for i in np.arange(dataset.num_items)],
+).replace(
+    0, np.nan
+)  # TODO: Is there any case when doing SVD where we would fill the NA's with mean ratings
+
+u, sigma, v_T = np.linalg(ratings, full_matrices=True)
+print(f"Singular values: {sigma.round(3)}")  # ? - Extract all of the elements.
+
+# ? - Creation of the sigma matrix. (Since we only get an array of values)
+Sigma = np.zeros((ratings.shape[0], ratings.shape[1]))
+Sigma[: ratings.shape[0], : ratings.shape[0]] = np.diag(sigma)
+
+# * Choose the number of latent dimensions you want:
+K = 50
+# * Porque limitamos Sigma, y V pero no U?
+# TODO - u = u[:, :K]?
+Sigma = Sigma[:, :K]
+v_T = v_T[:K, :]
+
+reconstructed_ratings = u.dot(Sigma.dot(v_T))
+
+rmse = np.sqrt((((ratings - reconstructed_ratings) ** 2) * ratings_mask).mean())
+print(f"\nRMSE = {rmse:.3f}")  # * We multiply by the ratings mask to get the precision
+
+print("Reconstructed matrix:")
+pd.DataFrame(
+    reconstructed_ratings.round(2),
+    index=[f"User {u + 1}" for u in np.arange(dataset.num_users)],
+    columns=[f"Item {i + 1}" for i in np.arange(dataset.num_items)],
+)
+
+# TODO: Create the function for the CORNAC Method to get the user recs. as well, not just the matrix
+
 # ! - Matrix Factorisation
 # * Factorises the ratings matrix into the product of two lower-rank matrices. "Capturing the low-rank structure of the user-item interactions".
-# * Y (mxn) => P (mxk) & Q (nxk), where k << m, n is the latent factor size. So Y approx PQ^T
+# * Y (mxn) => P (mxk) & Q^T (kxn), where k << m, n is the latent factor size. So Y^ = PQ^T
 # * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars.
 # * Q is the item matrix (n -> # of items) -> Rows measure item characteristics set.
+
+K = 10
+lbd = 0.01  # ? Lambda -> Regularisation
+# * Option 1 - Single MF model:
+K = 10
+lbd = 0.01
+mf = MF(
+    k=K,
+    max_iter=20,
+    learning_rate=0.01,
+    lambda_reg=lbd,
+    use_bias=False,
+    verbose=VERBOSE,
+    seed=SEED,
+    name=f"MF(K={K},lambda={lbd:.4f})",
+)
+
+# .fit(dataset) <- Attach to the mf function if you want to execute the below section.
+# ^^Also don't forget about the dataset
+# print("User factors:\n", mf.u_factors)
+# print("Item factors:\n", mf.i_factors)
+
+# * Option 2 - Multiple models (3 types):
+# TODO - How do we know when to incorporate bias terms into prediction formulas?
+# TODO - Or do we just analyse all three and take the best one?
+models = [
+    # ? 1. Baseline model - Predicts ratings on the overall average rating combined with user + item bias
+    BaselineOnly(max_iter=20, learning_rate=0.01, lambda_reg=0.01, verbose=VERBOSE),
+    # ? 2. Standard model - No bias
+    MF(
+        k=K,
+        max_iter=20,
+        learning_rate=0.01,
+        lambda_reg=0.01,
+        use_bias=False,
+        verbose=VERBOSE,
+        seed=SEED,
+        name=f"MF(K={K}, lambda={lbd:.4f})",
+    ),
+    # ? 3. This is the super saiyan of models combines all of them
+    MF(
+        k=K,
+        max_iter=20,
+        learning_rate=0.01,
+        lambda_reg=0.01,
+        use_bias=True,  # ? - Accounts for biases too
+        verbose=VERBOSE,
+        seed=SEED,
+        name=f"MF(K={K},bias, lambda={lbd:.4f})",
+    ),
+]
+
+# * Load the data for the MF
+# ? Option 1 - Non-csv
+data = movielens.load_feedback(variant="100K")
+# ? !!! - Option 2 - CORNAC CSV IMPORT
+pandas_df = pd.read_csv("csv_path")
+data = cornac.data.Dataset.from_uir(pandas_df.itertuples(index=False))
+
+# * Data split and calculate the RMSE
+rs = RatioSplit(data, test_size=0.2, seed=SEED, verbose=VERBOSE)
+rmse = cornac.metrics.RMSE()
+
+# * Execute the MF model
+cornac.Experiment(eval_method=rs, models=[mf], metrics=[rmse]).run()
+# ? - ^^If you only have one model.
+cornac.Experiment(eval_method=rs, models=models, metrics=[rmse]).run()
+# ? - ^^If you have multiple model
+
+# * Information on the latent factors chosen:
+var_df = pd.DataFrame(
+    {"Factor": np.arange(K), "Variance": np.var(mf.i_factors, axis=0)}
+)
+fig, ax = plt.subplots(figsize=(12, 5))
+plt.title("MF")
+sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax)
+
+# ? - Code to visualise in 2D the latent space to group films together.
+# TOP2F = (0, 2)
+# SAMPLE_SIZE = 20
+#
+# rng = np.random.RandomState(SEED)
+# sample_inds = rng.choice(
+#    np.arange(mf.i_factors.shape[0]), size=SAMPLE_SIZE, replace=False
+# )
+# = Selecting the top 2 latent vectors and seeing how it's grouping up the films
+# sample_df = pd.DataFrame(data=mf.i_factors[sample_inds][:, TOP2F], columns=["x", "y"])
+#
+# sns.lmplot(x="x", y="y", data=sample_df, height=11.0, fit_reg=False)
+# item_idx2id = list(mf.train_set.item_ids)
+# titles = item_df.loc[[int(item_idx2id[i]) for i in sample_inds]]["Title"].values
+# adjust_text(
+#    [plt.text(*sample_df.loc[i].values, titles[i], size=10) for i in range(len(titles))]
+# );
+#TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
+# ! - Non-negative matrix factorisation (NMF)
+# * Variant where the latent factors are constrained to be non-negative
+# * Ideal for non-negative factors like image processing, text mining, and rec. systems. 
+# * As there are no negative factors. 
+# * Allows for better interpretabiliy to reason with positive values: 
+k = 10
+nmf = NMF(k=k, 
+          max_iter=100, # ? - How do we decide on the number of iterations
+          learning_rate=0.01, 
+          lambda_reg=0.0, 
+          verbose=VERBOSE, 
+          seed=SEED, 
+          name=f'NMF (K = {k})'
+          )
+
+pandas_df = pd.read_csv("csv_path")
+data = cornac.data.Dataset.from_uir(pandas_df.itertuples(index=False))
+
+rs = RatioSplit(data, test_size = 0.2, seed = SEED, verbose=VERBOSE)
+rmse = cornac.metrics.RMSE()
+cornac.Experiment(eval_method=rs, models= [nmf], metrics=[rmse]).run()
+
+# ? - Visualise the variance for each latent factor in the NFM
+var_df = pd.DataFrame(
+    {"Factor": np.arange(K), "Variance": np.var(nmf.i_factors, axis=0)}
+)
+fig, ax = plt.subplots(figsize=(12, 5))
+plt.title("NFM")
+sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax);
+
+# ? - Create a the reconstruction matrix based on the original dimensions
+recons_matrix = pd.DataFrame(
+    index=range(ratings.shape[0]), columns=range(ratings.shape[1])
+)
+# ? - Populate with the values
+for u, i in itertools.product(
+    range(recons_matrix.shape[0]), range(recons_matrix.shape[1])
+):
+    recons_matrix[u, i] = mf.score(u, i)
+# ? - ^^Careful if you had multiple models, this is for a single one.
+
+rmse = np.sqrt((((ratings - recons_matrix) ** 2) * ratings_mask).mean())
+print(f"\nRMSE = {rmse:.3f}")
+print("Reconstructed matrix:")
+pd.DataFrame(
+    recons_matrix.round(2),
+    index=[f"User {u + 1}" for u in np.arange(dataset.num_users)],
+    columns=[f"Item {i + 1}" for i in np.arange(dataset.num_items)],
+)
+
+# TODO: Still don't have it clear how MF and SVD fill in the others
