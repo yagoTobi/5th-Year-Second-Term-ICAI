@@ -5,26 +5,56 @@
 # * Librerias
 import os
 import sys
+import time
 import math
+import torch
 import cornac
+import warnings
 import operator
 import itertools
 import scipy.stats
 import numpy as np
 import pandas as pd
+import torch as torch
+import torch.nn as nn
 import seaborn as sns
+import tensorflow as tf
 import scipy.sparse as sp
+import torch.optim as optim
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
+import torch.utils.data as data
 
+from tabulate import tabulate
 from cornac.utils import cache
+from sklearn.manifold import TSNE
 from adjustText import adjust_text
+from collections import defaultdict
 from scipy.sparse.linalg import svds
+from torch.utils.data import Dataset
 from numpy.linalg import matrix_rank
 from cornac.datasets import movielens
 from cornac.eval_methods import RatioSplit
+from recommenders.utils.timer import Timer
+from recommenders.datasets import movielens
+from recommenders.utils.constants import SEED
 from sklearn.metrics import mean_squared_error
-from cornac.models import MF, NMF, BaselineOnly
+from elasticsearch import Elasticsearch, helpers
 from sklearn.metrics.pairwise import cosine_similarity
+from cornac.models import MF, NMF, BaselineOnly, BPR, WMF
+from recommenders.utils.notebook_utils import store_metadata
+from recommenders.models.cornac.cornac_utils import predict_ranking
+from recommenders.datasets.python_splitters import python_random_split
+from recommenders.evaluation.python_evaluation import (
+    map,
+    ndcg_at_k,
+    precision_at_k,
+    recall_at_k,
+)
+
+print(f"System version: {sys.version}")
+print(f"Cornac version: {cornac.__version__}")
+print(f"Tensorflow version: {tf.__version__}")
 
 SEED = 42
 VERBOSE = False
@@ -66,8 +96,9 @@ df_sample = df.sample(n=10000, random_state=42)
 # * ###    a. User-Based Filtering                 (Linea XX)                          ####
 # * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
 # * ### 2. Model-Based Collaborative Filtering                                         ####
-# * ###    a. Matrix Factorisation                                                     ####
-# * ###    b. Singular Value Decomposition                                             ####
+# * ###    a. Singular Value Decomposition                                             ####
+# * ###    b. Matrix Factorisation                                                     ####
+# * ### 3. Implicit Feedback                                                           ####
 # * #######################################################################################
 # * #######################################################################################
 # * #######################################################################################
@@ -467,8 +498,7 @@ Sigma[: ratings.shape[0], : ratings.shape[0]] = np.diag(sigma)
 
 # * Choose the number of latent dimensions you want:
 K = 50
-# * Porque limitamos Sigma, y V pero no U?
-# TODO - u = u[:, :K]?
+#TODO - u = u[:, :K]? Porque limitamos Sigma, y V pero no U?
 Sigma = Sigma[:, :K]
 v_T = v_T[:K, :]
 
@@ -636,4 +666,141 @@ pd.DataFrame(
     columns=[f"Item {i + 1}" for i in np.arange(dataset.num_items)],
 )
 
-# TODO: Still don't have it clear how MF and SVD fill in the others
+
+# * - Identify the top items associated with each latent factor in an NMF
+item_idx2id = list(nmf.train_set.item_ids) # ? - Map the original id's of the items
+top_items = {}
+for k in range(K): # ? - For each latent vector 
+    # ? - For each column in the latent matrix, pick the top five items (Slice the last 5 items in ascending order. [::-1] then just reverses it)
+    top_inds = np.argsort(nmf.i_factors[:, k])[-5:][::-1] 
+    # * Make sure you have an item df 
+    # ? - Append to the dictionary the latent factor with its top 5 elements
+    top_items[f"Factor {k}"] = item_df.loc[[int(item_idx2id[i]) for i in top_inds]][
+        "Title"
+    ].values
+
+pd.DataFrame(top_items)
+
+# * Attempt to extract latent vector information by sorting into genre and see if they're related:
+item_idx2id = list(nmf.train_set.item_ids)
+top_genres = {}
+for k in range(K):
+    top_inds = np.argsort(nmf.i_factors[:, k])[-100:] # ? - Same procedure 
+    # ? - Make sure you have an item df
+    top_items = item_df.loc[[int(item_idx2id[i]) for i in top_inds]] # ? - Get the top films per latent ficture
+    # ? - Then drop the columns to just get the genre count. 
+    top_genres[f"Factor {k}"] = top_items.drop(columns=["Title", "Release Date"]).sum(
+        axis=0
+    )
+pd.DataFrame(top_genres)
+# TODO: Still don't have it clear how MF and SVD fill in the remaining elements !!!
+
+
+#! Implicit Feedback - Interaction based (Take a look at the notes)
+#? It compares pairs of items -> Item's the user has interacted with vs. items they haven't. 
+#? Attempts to learn a ranking that predicts the user's preference for the interacted item over the non-interacted one. 
+
+#? +: The user chose to interact with the item 
+#? -: The user chose not to interact with the item 
+#? *: Item is not specific comparison => Item is not considered specific comparison (Can't be compared with itself)
+#? ?: Unknown.
+
+#! Bayesian Probability Ratings - Cornac
+# * Import the data and split into train/test
+data = pd.read_csv('path_to_csv')
+train, test = python_random_split(data, 0.75)
+train_set = cornac.data.Dataset.from_uir(train.itertuples(index=False), seed=SEED)
+
+#print("Number of users: {}".format(train_set.num_users))
+#print("Number of items: {}".format(train_set.num_items))
+
+# * BPR Model
+# ? -top k items to recommend
+TOP_K = 10
+
+# ? - Model parameters
+NUM_FACTORS = 250
+NUM_EPOCHS = 100
+
+bpr = cornac.models.BPR(
+    k=NUM_FACTORS, # ? - Control the dimension of the latent space. 
+    max_iter=NUM_EPOCHS, # ? - Num of iterations for SGD
+    learning_rate=0.01,  # ? - Controls the step size alpha for gradient update. Small in this case
+    lambda_reg=0.001,    # ? - L2 Regularisation
+    verbose=True,
+    seed=SEED,
+).fit(train_set) # ? - In case you wish to train it directly
+
+# * The BPR model is effectively designed for item ranking. So we should only measure performance using the ranking metrics. 
+with Timer() as t: 
+    all_predictions = predict_ranking(
+        bpr, train, usercol='userID', itemcol='itemID', remove_seen=True
+    )
+print(f'Took {t} secondes for the prediction')
+
+all_predictions.head() # ? - Visualise the prediction for user ratings
+bpr.rank(3)[1][1394] # ? - Get the ranking of items for user with ID 3 -> Access the second element with itemID 1394
+#TODO ^^ In the above case, shouldn't we apply a mask for the prediction for it to be zero?
+
+# * Analysis of the predictions and extract their performance matrix 
+k = 10
+# Mean Average Precision for top k prediction items
+eval_map = map(test, all_predictions, col_prediction="prediction", k=k)
+# Normalized Discounted Cumulative Gain (nDCG)
+eval_ndcg = ndcg_at_k(test, all_predictions, col_prediction="prediction", k=k)
+# precision at k (min=0, max=1)
+eval_precision = precision_at_k(test, all_predictions, col_prediction="prediction", k=k)
+eval_recall = recall_at_k(test, all_predictions, col_prediction="prediction", k=k)
+
+print(
+    "MAP:\t%f" % eval_map,
+    "NDCG:\t%f" % eval_ndcg,
+    "Precision@K:\t%f" % eval_precision,
+    "Recall@K:\t%f" % eval_recall,
+    sep="\n",
+)
+warnings.filterwarnings("ignore")
+
+#! Weighted Matrix Factorisation 
+K = 50
+wmf = WMF(
+    k=K,
+    max_iter=100,
+    a=1.0,
+    b=0.01,
+    learning_rate=0.001,
+    lambda_u=0.01,
+    lambda_v=0.01,
+    verbose=VERBOSE,
+    seed=SEED,
+    name=f"WMF(K={K})",
+)
+
+eval_metrics = [
+    cornac.metrics.RMSE(),
+    cornac.metrics.AUC(),
+    cornac.metrics.Precision(k=10),
+    cornac.metrics.Recall(k=10),
+    cornac.metrics.FMeasure(k=10),
+    cornac.metrics.NDCG(k=[10, 20, 30]),
+    cornac.metrics.MRR(),
+    cornac.metrics.MAP(),
+]
+
+pandas_df = pd.read_csv("csv_path")
+data = cornac.data.Dataset.from_uir(pandas_df.itertuples(index=False))
+rs = RatioSplit(data, test_size=0.2, seed=SEED, verbose=VERBOSE)
+cornac.Experiment(eval_method=rs, models=[wmf, mf], metrics=eval_metrics).run() #? - This will output all of the metrics mentioned
+# * Consider that MF models are strong at predicting the ratings well. 
+# * However, WMF models are designed to rank items, by fitting binary adoptions. (A click, a purchase, a view)
+# * This is more about showing interest, rather than judging how much they will like it 
+
+#! Factorisation Machines (FM)
+# ? - Get the item df
+item_df = pd.read_csv('path_to_csv')
+# * Make sure to create a column with the Id index in case that the id's don't start as 0
+item_df["xxId_index"] = item_df["xxId"].astype("category").cat.codes
+item_df.head()
+
+# ? - Get the user df 
+user_df = pd.read_csv('path_to_csv')
