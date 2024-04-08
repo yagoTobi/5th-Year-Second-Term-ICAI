@@ -59,6 +59,21 @@ print(f"Tensorflow version: {tf.__version__}")
 SEED = 42
 VERBOSE = False
 
+# * #######################################################################################
+# * #######################################################################################
+# * #######################################################################################
+# * ### Indice (Collaborative Filtering techniques)                                    ####
+# * ### 1. Memory-Based Filtering                  (Linea XX)                          ####
+# * ###    a. User-Based Filtering                 (Linea XX)                          ####
+# * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
+# * ### 2. Model-Based Collaborative Filtering                                         ####
+# * ###    a. Singular Value Decomposition                                             ####
+# * ###    b. Matrix Factorisation                                                     ####
+# * ### 3. Implicit Feedback                                                           ####
+# * #######################################################################################
+# * #######################################################################################
+# * #######################################################################################
+
 # * Import file
 df_path = "df_path"
 df = pd.read_csv(df_path, header=0)
@@ -80,6 +95,8 @@ sorted_values_by_criteria.head(10)
 # * Take a sample of the dataset
 df_sample = df.sample(n=10000, random_state=42)
 
+#TODO: Añade el código aquí del ejercicio 
+
 # ? - Collaborative Filtering <- WE ARE INTERESTED IN THIS ONE
 # * - Model-based filtering technique <- Clustering, NN, Association, etc...
 # ? Use ML to find user ratings of unrated items: PCA, SVD, Neural nets
@@ -87,21 +104,6 @@ df_sample = df.sample(n=10000, random_state=42)
 # * - Memory-based filtering technique  <- User Based / Item Based <- THIS ONE FOR THE PRACTICAL
 # ? Based on cosine similarity or pearson correlation and taking the avg. of ratings.
 # ? Non-scalable for sparse data.
-
-# * #######################################################################################
-# * #######################################################################################
-# * #######################################################################################
-# * ### Indice (Collaborative Filtering techniques)                                    ####
-# * ### 1. Memory-Based Filtering                  (Linea XX)                          ####
-# * ###    a. User-Based Filtering                 (Linea XX)                          ####
-# * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
-# * ### 2. Model-Based Collaborative Filtering                                         ####
-# * ###    a. Singular Value Decomposition                                             ####
-# * ###    b. Matrix Factorisation                                                     ####
-# * ### 3. Implicit Feedback                                                           ####
-# * #######################################################################################
-# * #######################################################################################
-# * #######################################################################################
 
 # ? - Content-Based Filtering
 """
@@ -116,27 +118,29 @@ df_sample = df.sample(n=10000, random_state=42)
 #!#################################################################
 # * https://medium.com/@corymaklin/memory-based-collaborative-filtering-user-based-42b2679c6fb5
 # As an example, we're going to take the movies dataset
-# TODO: We're not going to get a test dataset in the exam, so what do we do there?
-train_df = pd.read_csv(
-    "ml-100k/u1.base",
-    sep="\t",
-    header=None,
-    names=["user_id", "item_id", "rating", "timestamp"],
-)
 
-test_df = pd.read_csv(
-    "ml-100k/u1.test",
-    sep="\t",
-    header=None,
-    names=["user_id", "item_id", "rating", "timestamp"],
-)
+df = pd.read_csv('path_to_csv')
 
-train_df.head()
+#train_df = pd.read_csv(
+#    "ml-100k/u1.base",
+#    sep="\t",
+#    header=None,
+#    names=["user_id", "item_id", "rating", "timestamp"],
+#)
+#
+#test_df = pd.read_csv(
+#    "ml-100k/u1.test",
+#    sep="\t",
+#    header=None,
+#    names=["user_id", "item_id", "rating", "timestamp"],
+#)
+#
+#train_df.head()
 
 # * !!!! - Construct the ratings matrix:
 # ? - values -> Cell values | index -> Rows | columns -> Columns
 ratings_matrix = pd.pivot_table(
-    train_df, values="rating", index="user_id", columns="item_id"
+    df, values="rating", index="user_id", columns="item_id"
 )
 
 # * Normalise the ratings matrix by subtracting every user's rating by the mean users rating:
@@ -150,75 +154,42 @@ similarity_matrix = (
 # ? - Case 2. Cosine similarity (WE WOULD NOW HAVE TO IMPUTE THE MISSING DATA -> Most common method: Fill in with the user or item average rating)
 # ?           We can proceed with this as long as all of the items have been normalised first.
 # ? - If we want to fill it in with zeroes:
-# TODO: Pregunta a Valle hecha - No ha respondido
 item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
-item_similarity_cosine = cosine_similarity(
-    normalized_ratings_matrix.fillna(ratings_matrix.T.mean()[user_id])  # type:ignore
-)
-item_similarity_cosine = cosine_similarity(
-    normalized_ratings_matrix.fillna(ratings_matrix.T.mean()[item_id])  # type:ignore
-)
-item_similarity_cosine
 
+# * Función del ejercicio 
+def userknn_cornac(df:pd.DataFrame):
 
-# * Calculate the score according to the formula:
-# ? - Case 1: Pearson
-def calculate_score(user_id, item_id):
-    """
-    Understanding the score formula is very important:
-    S(u,i) = r_u + {Sum(r_vi - r_v) * w_uv}/{Sum(w_uv)}
-    Score for user_id, item i = avg user rating + (normalised v rating*similarity weight)/similarity weight
-    Where:
-     * r_u is the user u's average rating
-     * r_vi is the user v's rating on item i
-     * r_v is the user v's average rating
-     * w_uv is the similarity between user's v and u (Done by either Pearson or Cosine)
+  df = df.astype({'UserId':object, 'ProductId':object})
+  records = df.to_records(index=False)
+  result = list(records)
 
-    """
+  K = 3  # number of nearest neighbors
+  VERBOSE = False
+  SEED = 42
+  uknn_cosine = UserKNN(k=K, similarity="cosine", name="UserKNN-Cosine", verbose=VERBOSE)
+  uknn_cosine_mc = UserKNN(k=K, similarity="cosine", mean_centered=True, name="UserKNN-Cosine-MC", verbose=VERBOSE)
+  uknn_pearson = UserKNN(k=K, similarity="pearson", name="UserKNN-Pearson", verbose=VERBOSE)
+  uknn_pearson_mc = UserKNN(k=K, similarity="pearson", mean_centered=True, name="UserKNN-Pearson-MC", verbose=VERBOSE)
+  
+  # Metrics
+  rec_300 = cornac.metrics.Recall(k=300)
+  rec_900 = cornac.metrics.Recall(k=900)
+  prec_30 = cornac.metrics.Precision(k=30)
+  rmse = cornac.metrics.RMSE()
+  mae = cornac.metrics.MAE()
+  
+  ratio_split = RatioSplit(result, test_size=0.1, seed=SEED, verbose=VERBOSE)
+  cornac.Experiment(eval_method=ratio_split,
+                    models=[uknn_cosine, uknn_cosine_mc, uknn_pearson, uknn_pearson_mc],
+                    metrics=[rec_300, rec_900, prec_30, rmse, mae],
+                    ).run()
+  
+  userknn_models = {'uknn_cosine': uknn_cosine, 'uknn_cosine_mc': uknn_cosine_mc,
+                'uknn_pearson': uknn_pearson, 'uknn_pearson_mc': uknn_pearson_mc}
+  
+  return userknn_models
 
-    # ? Check if the item is in the training dataset:
-    if item_id not in ratings_matrix.columns:  #
-        return 2.5
-
-    similarity_scores = similarity_matrix[user_id].drop(
-        labels=user_id
-    )  # ? Take out the user itself, so that it doesn't self-match
-    normalized_ratings = normalized_ratings_matrix[item_id].drop(
-        index=user_id
-    )  # ? For all of the ratings, take out the user itself
-
-    # ? If none of the other users have rated items in common with the user, return the baseline value:
-    if similarity_scores.isna().all():
-        return 2.5
-
-    total_score = 0
-    total_weight = 0
-    # ? For each item
-    for v in normalized_ratings.index:
-        # ? It's possible for a user to rate the item but not in common with the user in question:
-        if not pd.isna(similarity_scores[v]):
-            total_score += normalized_ratings[v] * similarity_scores[v]
-            total_weight += abs(similarity_scores[v])
-
-    avg_user_rating = ratings_matrix.T.mean()[user_id]
-    return (
-        avg_user_rating + total_score / total_weight
-    )  # ? Adding back the original weight
-
-
-# * Score testing
-test_ratings = np.array(test_df["rating"])
-user_item_pairs = zip(test_df["user_id"], test_df["item_id"])
-pred_ratings = np.array(
-    [calculate_score(user_id, item_id) for (user_id, item_id) in user_item_pairs]
-)
-print(np.sqrt(mean_squared_error(test_ratings, pred_ratings)))
-
-
-# * Baseline rating - Whic is just the mean of all ratings given
-baseline_rating = train_df["rating"].mean()
-baseline_ratings = np.array([baseline_rating for _ in range(test_df.shape[0])])
-print(np.sqrt(mean_squared_error(test_ratings, baseline_ratings)))
+userknn_models = userknn_cornac(amazon_ratings1)
 
 #!#################################################################
 #!########## Memory-Based: Item-based filtering ###################
@@ -248,49 +219,6 @@ picked_userid_watched = (
 )
 
 picked_userid_watched.head()
-
-# ?####################### SINGLE ITEM EXAMPLE ##############################################
-# ? Getting the similarity score for a specific movie using Pearson
-item_similarity_p = normalized_ratings_matrix.T.corr()
-item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
-
-picked_movie_similarity_score = (
-    item_similarity_p[
-        [picked_movie]
-    ]  # * This is a specific Pearson case, for a specific film
-    .reset_index()
-    .rename(columns={"American Pie (1999)": "similarity_score"})
-)
-
-n = 5  # ? - Get the first 5 films which user 1 rated
-# ? Rank the similarities between the movies which user 1 rated and American Pie.
-picked_userid_watched_similarity = pd.merge(
-    left=picked_userid_watched,
-    right=picked_movie_similarity_score,
-    on="title",
-    how="inner",  # * This inner join with pandas is the way in which we're going to get the films in common
-).sort_values("similarity_score", ascending=False)[:n]
-
-# ? - In case of the item_based_example, we can see that the similarity score tell us, that they are completely uncorrelated.
-# ? - After detecting the similarity score for each specific film with respect to the others, the higher similarity movies get more weight.
-# ? - This weighted average is the predicted rating for American Pie by user 1.
-predicted_item_rating = round(
-    # * So what this essentially does, is compute the average of the ratings
-    # * However the average is weighted by how similar the films are. Why is that?
-    # * This is because more similar films will be closer, so this is a pseudo-approximation.
-    np.average(
-        picked_userid_watched_similarity["rating"],
-        weights=picked_userid_watched_similarity["similarity_score"],
-    ),
-    6,  # * Number of decimals
-)
-
-# * Don't we have to add the average user recommentadion, since this is based on the normalised dataset?
-print(
-    f"The predicted rating for {picked_movie} by user {picked_userid} is {predicted_item_rating}"
-)
-# ?########################?########################?########################?########################?#######################
-
 
 # * Now we create a function, with follows four steps:
 # ? - Create a list of movies which the user hasn't watched before.
@@ -998,3 +926,105 @@ for epoch in range(epochs):
     print(f"\tvalidation rmse: {(math.sqrt(valid_loss)):.4f}")
 
 #TODO: Aprender como ejecutar para coger la recomendación. Too abstract
+
+#!####################### Item-based filtering: SINGLE ITEM EXAMPLE - Theory purposes##############################################
+# ? Getting the similarity score for a specific movie using Pearson
+item_similarity_p = normalized_ratings_matrix.T.corr()
+item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
+
+picked_movie_similarity_score = (
+    item_similarity_p[
+        [picked_movie]
+    ]  # * This is a specific Pearson case, for a specific film
+    .reset_index()
+    .rename(columns={"American Pie (1999)": "similarity_score"})
+)
+
+n = 5  # ? - Get the first 5 films which user 1 rated
+# ? Rank the similarities between the movies which user 1 rated and American Pie.
+picked_userid_watched_similarity = pd.merge(
+    left=picked_userid_watched,
+    right=picked_movie_similarity_score,
+    on="title",
+    how="inner",  # * This inner join with pandas is the way in which we're going to get the films in common
+).sort_values("similarity_score", ascending=False)[:n]
+
+# ? - In case of the item_based_example, we can see that the similarity score tell us, that they are completely uncorrelated.
+# ? - After detecting the similarity score for each specific film with respect to the others, the higher similarity movies get more weight.
+# ? - This weighted average is the predicted rating for American Pie by user 1.
+predicted_item_rating = round(
+    # * So what this essentially does, is compute the average of the ratings
+    # * However the average is weighted by how similar the films are. Why is that?
+    # * This is because more similar films will be closer, so this is a pseudo-approximation.
+    np.average(
+        picked_userid_watched_similarity["rating"],
+        weights=picked_userid_watched_similarity["similarity_score"],
+    ),
+    6,  # * Number of decimals
+)
+
+# * Don't we have to add the average user recommentadion, since this is based on the normalised dataset?
+print(
+    f"The predicted rating for {picked_movie} by user {picked_userid} is {predicted_item_rating}"
+)
+# ?########################?########################?########################?########################?#######################
+
+# ! - User-based Pearson formula: 
+# ! #############################
+# * Calculate the score according to the formula:
+# ? - Case 1: Pearson
+def calculate_score(user_id, item_id):
+    """
+    Understanding the score formula is very important:
+    S(u,i) = r_u + {Sum(r_vi - r_v) * w_uv}/{Sum(w_uv)}
+    Score for user_id, item i = avg user rating + (normalised v rating*similarity weight)/similarity weight
+    Where:
+     * r_u is the user u's average rating
+     * r_vi is the user v's rating on item i
+     * r_v is the user v's average rating
+     * w_uv is the similarity between user's v and u (Done by either Pearson or Cosine)
+
+    """
+
+    # ? Check if the item is in the training dataset:
+    if item_id not in ratings_matrix.columns:  #
+        return 2.5
+
+    similarity_scores = similarity_matrix[user_id].drop(
+        labels=user_id
+    )  # ? Take out the user itself, so that it doesn't self-match
+    normalized_ratings = normalized_ratings_matrix[item_id].drop(
+        index=user_id
+    )  # ? For all of the ratings, take out the user itself
+
+    # ? If none of the other users have rated items in common with the user, return the baseline value:
+    if similarity_scores.isna().all():
+        return 2.5
+
+    total_score = 0
+    total_weight = 0
+    # ? For each item
+    for v in normalized_ratings.index:
+        # ? It's possible for a user to rate the item but not in common with the user in question:
+        if not pd.isna(similarity_scores[v]):
+            total_score += normalized_ratings[v] * similarity_scores[v]
+            total_weight += abs(similarity_scores[v])
+
+    avg_user_rating = ratings_matrix.T.mean()[user_id]
+    return (
+        avg_user_rating + total_score / total_weight
+    )  # ? Adding back the original weight
+
+# * Score testing
+test_ratings = np.array(test_df["rating"])
+user_item_pairs = zip(test_df["user_id"], test_df["item_id"])
+pred_ratings = np.array(
+    [calculate_score(user_id, item_id) for (user_id, item_id) in user_item_pairs]
+)
+print(np.sqrt(mean_squared_error(test_ratings, pred_ratings)))
+
+
+# * Baseline rating - Which is just the mean of all ratings given
+baseline_rating = train_df["rating"].mean()
+baseline_ratings = np.array([baseline_rating for _ in range(test_df.shape[0])])
+print(np.sqrt(mean_squared_error(test_ratings, baseline_ratings)))
