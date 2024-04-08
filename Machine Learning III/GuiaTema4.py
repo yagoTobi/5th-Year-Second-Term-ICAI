@@ -63,7 +63,9 @@ VERBOSE = False
 df_path = "df_path"
 df = pd.read_csv(df_path, header=0)
 
-# * EDA
+#!#################################################################
+#!###################         EDA               ###################
+#!#################################################################
 df.head()
 df.info()
 df.shape()
@@ -78,8 +80,6 @@ sorted_values_by_criteria.head(10)
 # * Take a sample of the dataset
 df_sample = df.sample(n=10000, random_state=42)
 
-
-# ! Recommender systems:
 # ? - Collaborative Filtering <- WE ARE INTERESTED IN THIS ONE
 # * - Model-based filtering technique <- Clustering, NN, Association, etc...
 # ? Use ML to find user ratings of unrated items: PCA, SVD, Neural nets
@@ -111,7 +111,9 @@ df_sample = df.sample(n=10000, random_state=42)
 ! Pero por ahora el foco de la asignatura esta con el user-item matrix. No por ejemplo movie genre.
 """
 
-# ! - Memory-Based: User-Based Filtering
+#!#################################################################
+#!########## Memory-Based: User-based filtering ###################
+#!#################################################################
 # * https://medium.com/@corymaklin/memory-based-collaborative-filtering-user-based-42b2679c6fb5
 # As an example, we're going to take the movies dataset
 # TODO: We're not going to get a test dataset in the exam, so what do we do there?
