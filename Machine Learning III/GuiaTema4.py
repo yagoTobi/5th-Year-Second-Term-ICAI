@@ -218,7 +218,9 @@ baseline_rating = train_df["rating"].mean()
 baseline_ratings = np.array([baseline_rating for _ in range(test_df.shape[0])])
 print(np.sqrt(mean_squared_error(test_ratings, baseline_ratings)))
 
-# ! - Memory-Based: Item-based filtering
+#!#################################################################
+#!########## Memory-Based: Item-based filtering ###################
+#!#################################################################
 # * Predict user's rating for one movie process:
 # * 1. Create a list of the movies which the user 1 has watched and rated.
 # * 2. Rank the similarities between the movies that user 1 has rated and the movie to predict.
@@ -350,8 +352,9 @@ def item_based_rec(
         :number_of_recommendations
     ]
 
-
-# ! - Model-based collaborative filtering techniques:
+#!#################################################################
+#!###### Model-based collaborative filtering techniques ###########
+#!#################################################################
 # * Proceed with the steps to obtain the ratings matrix
 mean_rating = 2.5
 r_df = ratings_df.pivot(index="userId", columns="movieId", values="rating").fillna(
@@ -369,7 +372,9 @@ print(
     np.count_nonzero(r)
 )  # * This returns the nonzero elements -> Check that all elements are filled in.
 
-#! - Singular Value Decomp - Normal
+#!#################################################################
+#!################ Singular Value Decomp - Non-Cornac #############
+#!#################################################################
 # * Split a the mxn matrix into 3 (Rotation, recaling (+/-), rotation)
 # * Expressed as M = U * Sigma * V^T
 # *     U (mxm) -> Orthonormal columns
@@ -469,8 +474,10 @@ df = already_rated[["movieId", "title", "genres"]].copy()
 # df.head(5)
 predictions.head(5)
 
-#! - Singular Value Decomp - Cornac
-#! - Careful with CORNAC, it only accepts its own type of data:
+#!#################################################################
+#!################ Singular Value Decomp - Cornac #################
+#!#################################################################
+#! - Careful with CORNAC, it only accepts its own format of data:
 
 sample_df = pd.read_csv("csv_path")
 dataset = cornac.data.Dataset.from_uir(sample_df.itertuples(index=False))
@@ -516,7 +523,10 @@ pd.DataFrame(
 
 # TODO: Create the function for the CORNAC Method to get the user recs. as well, not just the matrix
 
-# ! - Matrix Factorisation
+#!#################################################################
+#!########################## Matrix Factorisation #################
+#!#################################################################
+
 # * Factorises the ratings matrix into the product of two lower-rank matrices. "Capturing the low-rank structure of the user-item interactions".
 # * Y (mxn) => P (mxk) & Q^T (kxn), where k << m, n is the latent factor size. So Y^ = PQ^T
 # * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars.
@@ -615,8 +625,12 @@ sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax)
 # adjust_text(
 #    [plt.text(*sample_df.loc[i].values, titles[i], size=10) for i in range(len(titles))]
 # );
+
 #TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
-# ! - Non-negative matrix factorisation (NMF)
+#!#################################################################
+#!########### Non-negative matrix factorisation (NMF) #############
+#!#################################################################
+
 # * Variant where the latent factors are constrained to be non-negative
 # * Ideal for non-negative factors like image processing, text mining, and rec. systems. 
 # * As there are no negative factors. 
@@ -695,8 +709,9 @@ for k in range(K):
 pd.DataFrame(top_genres)
 # TODO: Still don't have it clear how MF and SVD fill in the remaining elements !!!
 
-
-#! Implicit Feedback - Interaction based (Take a look at the notes)
+#!#################################################################
+#!#######   Implicit Feedback - Interaction based     #############
+#!#################################################################
 #? It compares pairs of items -> Item's the user has interacted with vs. items they haven't. 
 #? Attempts to learn a ranking that predicts the user's preference for the interacted item over the non-interacted one. 
 
@@ -705,7 +720,9 @@ pd.DataFrame(top_genres)
 #? *: Item is not specific comparison => Item is not considered specific comparison (Can't be compared with itself)
 #? ?: Unknown.
 
-#! Bayesian Probability Ratings - Cornac
+#!#################################################################
+#!#######   Bayesian Probability Ratings - Cornac     #############
+#!#################################################################
 # * Import the data and split into train/test
 data = pd.read_csv('path_to_csv')
 train, test = python_random_split(data, 0.75)
@@ -761,7 +778,10 @@ print(
 )
 warnings.filterwarnings("ignore")
 
-#! Weighted Matrix Factorisation 
+#!#################################################################
+#!###############   Weighted Matrix Factorisation     #############
+#!#################################################################
+
 K = 50
 wmf = WMF(
     k=K,
@@ -795,12 +815,184 @@ cornac.Experiment(eval_method=rs, models=[wmf, mf], metrics=eval_metrics).run() 
 # * However, WMF models are designed to rank items, by fitting binary adoptions. (A click, a purchase, a view)
 # * This is more about showing interest, rather than judging how much they will like it 
 
-#! Factorisation Machines (FM)
-# ? - Get the item df
+#!##########################################################
+#!############# Factorisation Machines (FM) ################
+#!##########################################################
+
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+    x = torch.ones(1, device=device)
+    print(x)
+else:
+    print("MPS device not found.")
+
+# * - Get the item df
 item_df = pd.read_csv('path_to_csv')
-# * Make sure to create a column with the Id index in case that the id's don't start as 0
-item_df["xxId_index"] = item_df["xxId"].astype("category").cat.codes
+# ? - Make sure to create a column with the Id index in case that the id's don't start as 0
+item_df["itemId_index"] = item_df["itemId"].astype("category").cat.codes
 item_df.head()
 
-# ? - Get the user df 
+# * - Get the user df 
 user_df = pd.read_csv('path_to_csv')
+# ? - Remember to factorise all categorical variables !!! - Select those which are relevant
+user_df['gender_index'] = user_df["gender"].astype("category").cat.codes
+user_df['age_index'] = user_df["age"].astype("category").cat.codes
+user_df['occupation_index'] = user_df["occupation"].astype("category").cat.codes
+user_df['userId_index'] = user_df["userId"].astype("category").cat.codes
+user_df.head()
+
+# * - Get the ratings df and join it with the userId and itemId 
+ratings_df = pd.read_csv('path_to_csv')
+ratings = ratings.join(item_df.set_index("itemId"), on="movieId")
+ratings = ratings.join(user_df.set_index("userId"), on="userId")
+
+# * - Get the feature columns to prepare for Factor Machines. !!! Don't forget to modify for the real ones. 
+#TODO - Is multi-fesature recommendation systems only relevant when it comes to implicit feedback?
+feature_columns = [
+    'userId_index', 
+    'itemId_index', 
+    'age_index', 
+    'gender_index', 
+    'occupation_index'
+]
+
+feature_sizes = {
+    'userId_index': len(ratings['userId_index'].unique()), 
+    'movieId_index': len(ratings['itemId_index'].unique()), 
+    'age_index': len(ratings['age_index'].unique()), 
+    'gender_index': len(ratings['gender_index'].unique()), 
+    'occupation_index': len(ratings['occupation_index'].unique()), 
+}
+
+# * Set the second order FM model made of three parts: 
+# ? - 1. The offsets: 
+next_offset = 0
+feature_offsets = {}
+
+# * This is in order to establish when to pass to the next feature
+for k,v in feature_sizes.items(): 
+    feature_offsets[k] = next_offset
+    next_offset += v
+
+# * Map all column indices to start from correct offset
+for column in feature_columns: 
+    ratings[column] = ratings[column].apply(lambda c: c + feature_offsets[column])
+
+# * - Only visualise the feature columns along with the ratings, because that's what we need for FM. 
+ratings[[*feature_columns, 'rating']].head(5)
+
+# * - Initialise the data and split it into train and test
+data_x = torch.tensor(ratings[feature_columns].values)
+data_y = torch.tensor(ratings["rating"].values).float()
+dataset = data.TensorDataset(data_x, data_y)
+
+bs = 1024
+train_n = int(len(dataset) * 0.9)
+valid_n = len(dataset) - train_n
+splits = [train_n, valid_n]
+assert sum(splits) == len(dataset) # ? - Verify that the split has been done correctly
+trainset, devset = torch.utils.data.random_split(dataset, splits) # ? - Assign the data to each split
+train_dataloader = data.DataLoader(trainset, batch_size=bs, shuffle=True)
+dev_dataloader = data.DataLoader(devset, batch_size=bs, shuffle=True)
+
+# * Function to fill in a tensor with a 'truncated distribution' -> mean 0, std 1
+# copied from fastai:
+def trunc_normal_(x, mean=0.0, std=1.0):
+    """
+    Modifies a PyTorch tensor in-place, filling it with random values that approximate a truncated normal distribution.
+    
+    This function fills the tensor `x` with values drawn from a standard normal distribution, then applies a modulus operation to limit the absolute values, and finally scales and shifts these values to achieve the desired mean and standard deviation. Note that the approach does not strictly adhere to a statistically accurate truncated normal distribution, as it does not cut off values outside a specific range but rather wraps them within a limited range.
+    
+    Parameters:
+    - x (Tensor): The PyTorch tensor to be modified in-place.
+    - mean (float, optional): The mean of the distribution after adjustment. Defaults to 0.0.
+    - std (float, optional): The standard deviation of the distribution after adjustment. Defaults to 1.0.
+    
+    Returns:
+    - Tensor: The modified tensor `x` with values approximating a truncated normal distribution centered around `mean` and with a standard deviation of `std`. The tensor is modified in-place, so the return value is the same tensor object `x`.
+    """
+    return x.normal_().fmod_(2).mul_(std).add_(mean)
+
+class FMModel(nn.Module):
+    def __init__(self, n, k): # ? - n: Number of unique features. k: Number of latent vectors
+        super().__init__()
+
+        self.w0 = nn.Parameter(torch.zeros(1)) # ? - Global bias 
+        self.bias = nn.Embedding(n, 1)         # ? - Embedding layer for bias per feature
+        self.embeddings = nn.Embedding(n, k)   # ? - The actual embedding with dimension k 
+
+        # ? - This initialises the embeddings and bias layers with a truncated normal distribution
+        # See https://arxiv.org/abs/1711.09160
+        with torch.no_grad():
+            trunc_normal_(self.embeddings.weight, std=0.01)
+        with torch.no_grad():
+            trunc_normal_(self.bias.weight, std=0.01)
+
+    def forward(self, X): # ? - How is the input tensor processed to produce a prediction?
+        emb = self.embeddings(X) # ? - Compute embeddings for the input features 
+        # ? - emb has shape: [batch_size, num_of_features, k]
+        # calculate the interactions in complexity of O(nk) see lemma 3.1 from paper
+        pow_of_sum = emb.sum(dim=1).pow(2)
+        sum_of_pow = emb.pow(2).sum(dim=1)
+        pairwise = (pow_of_sum - sum_of_pow).sum(1) * 0.5
+        bias = self.bias(X).squeeze().sum(1)
+        # I wrap the result with a sigmoid function to limit to be between 0 and 5.5.
+        return torch.sigmoid(self.w0 + bias + pairwise) * 5.5
+    #? ^^Returns a sigmoid as the output will be limited between 0 and 1 -> The 5.5 I'm not sure why
+    #? Probably because of the rating prediction.
+
+# fit/test functions
+def fit(iterator, model, optimizer, criterion):
+    train_loss = 0
+    model.train()
+    for x, y in iterator:
+        optimizer.zero_grad()
+        y_hat = model(x.to(device))
+        loss = criterion(y_hat, y.to(device))
+        train_loss += loss.item() * x.shape[0]
+        loss.backward()
+        optimizer.step()
+    return train_loss / len(iterator.dataset)
+
+
+def test(iterator, model, criterion):
+    train_loss = 0
+    model.eval()
+    for x, y in iterator:
+        with torch.no_grad():
+            y_hat = model(x.to(device))
+        loss = criterion(y_hat, y.to(device))
+        train_loss += loss.item() * x.shape[0]
+    return train_loss / len(iterator.dataset)
+
+def train_n_epochs(model, n, optimizer, scheduler):
+    criterion = nn.MSELoss().to(device)
+    for epoch in range(n):
+        start_time = time.time()
+        train_loss = fit(train_dataloader, model, optimizer, criterion)
+        valid_loss = test(dev_dataloader, model, criterion)
+        scheduler.step()
+        secs = int(time.time() - start_time)
+        print(f"epoch {epoch}. time: {secs}[s]")
+        print(f"\ttrain rmse: {(math.sqrt(train_loss)):.4f}")
+        print(f"\tvalidation rmse: {(math.sqrt(valid_loss)):.4f}")
+
+
+model = FMModel(data_x.max() + 1, 20).to(device)
+wd = 1e-5
+lr = 0.001
+epochs = 10
+optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[7], gamma=0.1)
+criterion = nn.MSELoss().to(device)
+for epoch in range(epochs):
+    start_time = time.time()
+    train_loss = fit(train_dataloader, model, optimizer, criterion)
+    valid_loss = test(dev_dataloader, model, criterion)
+    scheduler.step()
+    secs = int(time.time() - start_time)
+    print(f"epoch {epoch}. time: {secs}[s]")
+    print(f"\ttrain rmse: {(math.sqrt(train_loss)):.4f}")
+    print(f"\tvalidation rmse: {(math.sqrt(valid_loss)):.4f}")
+
+#TODO: Aprender como ejecutar para coger la recomendación. Too abstract
