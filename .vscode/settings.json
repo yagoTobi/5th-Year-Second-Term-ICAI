@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./Machine Learning III/T4.2-Recommendation-Implicit"
+    ]
+}

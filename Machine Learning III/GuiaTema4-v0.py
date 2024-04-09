@@ -354,6 +354,7 @@ def item_based_rec(
         :number_of_recommendations
     ]
 
+
 #!#################################################################
 #!###### Model-based collaborative filtering techniques ###########
 #!#################################################################
@@ -507,7 +508,7 @@ Sigma[: ratings.shape[0], : ratings.shape[0]] = np.diag(sigma)
 
 # * Choose the number of latent dimensions you want:
 K = 50
-#TODO - u = u[:, :K]? Porque limitamos Sigma, y V pero no U?
+# TODO - u = u[:, :K]? Porque limitamos Sigma, y V pero no U?
 Sigma = Sigma[:, :K]
 v_T = v_T[:K, :]
 
@@ -628,31 +629,32 @@ sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax)
 #    [plt.text(*sample_df.loc[i].values, titles[i], size=10) for i in range(len(titles))]
 # );
 
-#TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
+# TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
 #!#################################################################
 #!########### Non-negative matrix factorisation (NMF) #############
 #!#################################################################
 
 # * Variant where the latent factors are constrained to be non-negative
-# * Ideal for non-negative factors like image processing, text mining, and rec. systems. 
-# * As there are no negative factors. 
-# * Allows for better interpretabiliy to reason with positive values: 
+# * Ideal for non-negative factors like image processing, text mining, and rec. systems.
+# * As there are no negative factors.
+# * Allows for better interpretabiliy to reason with positive values:
 k = 10
-nmf = NMF(k=k, 
-          max_iter=100, # ? - How do we decide on the number of iterations
-          learning_rate=0.01, 
-          lambda_reg=0.0, 
-          verbose=VERBOSE, 
-          seed=SEED, 
-          name=f'NMF (K = {k})'
-          )
+nmf = NMF(
+    k=k,
+    max_iter=100,  # ? - How do we decide on the number of iterations
+    learning_rate=0.01,
+    lambda_reg=0.0,
+    verbose=VERBOSE,
+    seed=SEED,
+    name=f"NMF (K = {k})",
+)
 
 pandas_df = pd.read_csv("csv_path")
 data = cornac.data.Dataset.from_uir(pandas_df.itertuples(index=False))
 
-rs = RatioSplit(data, test_size = 0.2, seed = SEED, verbose=VERBOSE)
+rs = RatioSplit(data, test_size=0.2, seed=SEED, verbose=VERBOSE)
 rmse = cornac.metrics.RMSE()
-cornac.Experiment(eval_method=rs, models= [nmf], metrics=[rmse]).run()
+cornac.Experiment(eval_method=rs, models=[nmf], metrics=[rmse]).run()
 
 # ? - Visualise the variance for each latent factor in the NFM
 var_df = pd.DataFrame(
@@ -660,7 +662,7 @@ var_df = pd.DataFrame(
 )
 fig, ax = plt.subplots(figsize=(12, 5))
 plt.title("NFM")
-sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax);
+sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax)
 
 # ? - Create a the reconstruction matrix based on the original dimensions
 recons_matrix = pd.DataFrame(
@@ -684,12 +686,12 @@ pd.DataFrame(
 
 
 # * - Identify the top items associated with each latent factor in an NMF
-item_idx2id = list(nmf.train_set.item_ids) # ? - Map the original id's of the items
+item_idx2id = list(nmf.train_set.item_ids)  # ? - Map the original id's of the items
 top_items = {}
-for k in range(K): # ? - For each latent vector 
+for k in range(K):  # ? - For each latent vector
     # ? - For each column in the latent matrix, pick the top five items (Slice the last 5 items in ascending order. [::-1] then just reverses it)
-    top_inds = np.argsort(nmf.i_factors[:, k])[-5:][::-1] 
-    # * Make sure you have an item df 
+    top_inds = np.argsort(nmf.i_factors[:, k])[-5:][::-1]
+    # * Make sure you have an item df
     # ? - Append to the dictionary the latent factor with its top 5 elements
     top_items[f"Factor {k}"] = item_df.loc[[int(item_idx2id[i]) for i in top_inds]][
         "Title"
@@ -701,10 +703,12 @@ pd.DataFrame(top_items)
 item_idx2id = list(nmf.train_set.item_ids)
 top_genres = {}
 for k in range(K):
-    top_inds = np.argsort(nmf.i_factors[:, k])[-100:] # ? - Same procedure 
+    top_inds = np.argsort(nmf.i_factors[:, k])[-100:]  # ? - Same procedure
     # ? - Make sure you have an item df
-    top_items = item_df.loc[[int(item_idx2id[i]) for i in top_inds]] # ? - Get the top films per latent ficture
-    # ? - Then drop the columns to just get the genre count. 
+    top_items = item_df.loc[
+        [int(item_idx2id[i]) for i in top_inds]
+    ]  # ? - Get the top films per latent ficture
+    # ? - Then drop the columns to just get the genre count.
     top_genres[f"Factor {k}"] = top_items.drop(columns=["Title", "Release Date"]).sum(
         axis=0
     )
@@ -714,24 +718,24 @@ pd.DataFrame(top_genres)
 #!#################################################################
 #!#######   Implicit Feedback - Interaction based     #############
 #!#################################################################
-#? It compares pairs of items -> Item's the user has interacted with vs. items they haven't. 
-#? Attempts to learn a ranking that predicts the user's preference for the interacted item over the non-interacted one. 
+# ? It compares pairs of items -> Item's the user has interacted with vs. items they haven't.
+# ? Attempts to learn a ranking that predicts the user's preference for the interacted item over the non-interacted one.
 
-#? +: The user chose to interact with the item 
-#? -: The user chose not to interact with the item 
-#? *: Item is not specific comparison => Item is not considered specific comparison (Can't be compared with itself)
-#? ?: Unknown.
+# ? +: The user chose to interact with the item
+# ? -: The user chose not to interact with the item
+# ? *: Item is not specific comparison => Item is not considered specific comparison (Can't be compared with itself)
+# ? ?: Unknown.
 
 #!#################################################################
 #!#######   Bayesian Probability Ratings - Cornac     #############
 #!#################################################################
 # * Import the data and split into train/test
-data = pd.read_csv('path_to_csv')
+data = pd.read_csv("path_to_csv")
 train, test = python_random_split(data, 0.75)
 train_set = cornac.data.Dataset.from_uir(train.itertuples(index=False), seed=SEED)
 
-#print("Number of users: {}".format(train_set.num_users))
-#print("Number of items: {}".format(train_set.num_items))
+# print("Number of users: {}".format(train_set.num_users))
+# print("Number of items: {}".format(train_set.num_items))
 
 # * BPR Model
 # ? -top k items to recommend
@@ -742,26 +746,30 @@ NUM_FACTORS = 250
 NUM_EPOCHS = 100
 
 bpr = cornac.models.BPR(
-    k=NUM_FACTORS, # ? - Control the dimension of the latent space. 
-    max_iter=NUM_EPOCHS, # ? - Num of iterations for SGD
+    k=NUM_FACTORS,  # ? - Control the dimension of the latent space.
+    max_iter=NUM_EPOCHS,  # ? - Num of iterations for SGD
     learning_rate=0.01,  # ? - Controls the step size alpha for gradient update. Small in this case
-    lambda_reg=0.001,    # ? - L2 Regularisation
+    lambda_reg=0.001,  # ? - L2 Regularisation
     verbose=True,
     seed=SEED,
-).fit(train_set) # ? - In case you wish to train it directly
+).fit(
+    train_set
+)  # ? - In case you wish to train it directly
 
-# * The BPR model is effectively designed for item ranking. So we should only measure performance using the ranking metrics. 
-with Timer() as t: 
+# * The BPR model is effectively designed for item ranking. So we should only measure performance using the ranking metrics.
+with Timer() as t:
     all_predictions = predict_ranking(
-        bpr, train, usercol='userID', itemcol='itemID', remove_seen=True
+        bpr, train, usercol="userID", itemcol="itemID", remove_seen=True
     )
-print(f'Took {t} secondes for the prediction')
+print(f"Took {t} secondes for the prediction")
 
-all_predictions.head() # ? - Visualise the prediction for user ratings
-bpr.rank(3)[1][1394] # ? - Get the ranking of items for user with ID 3 -> Access the second element with itemID 1394
-#TODO ^^ In the above case, shouldn't we apply a mask for the prediction for it to be zero?
+all_predictions.head()  # ? - Visualise the prediction for user ratings
+bpr.rank(3)[1][
+    1394
+]  # ? - Get the ranking of items for user with ID 3 -> Access the second element with itemID 1394
+# TODO ^^ In the above case, shouldn't we apply a mask for the prediction for it to be zero?
 
-# * Analysis of the predictions and extract their performance matrix 
+# * Analysis of the predictions and extract their performance matrix
 k = 10
 # Mean Average Precision for top k prediction items
 eval_map = map(test, all_predictions, col_prediction="prediction", k=k)
@@ -812,10 +820,12 @@ eval_metrics = [
 pandas_df = pd.read_csv("csv_path")
 data = cornac.data.Dataset.from_uir(pandas_df.itertuples(index=False))
 rs = RatioSplit(data, test_size=0.2, seed=SEED, verbose=VERBOSE)
-cornac.Experiment(eval_method=rs, models=[wmf, mf], metrics=eval_metrics).run() #? - This will output all of the metrics mentioned
-# * Consider that MF models are strong at predicting the ratings well. 
+cornac.Experiment(
+    eval_method=rs, models=[wmf, mf], metrics=eval_metrics
+).run()  # ? - This will output all of the metrics mentioned
+# * Consider that MF models are strong at predicting the ratings well.
 # * However, WMF models are designed to rank items, by fitting binary adoptions. (A click, a purchase, a view)
-# * This is more about showing interest, rather than judging how much they will like it 
+# * This is more about showing interest, rather than judging how much they will like it
 
 #!##########################################################
 #!############# Factorisation Machines (FM) ################
@@ -829,59 +839,59 @@ else:
     print("MPS device not found.")
 
 # * - Get the item df
-item_df = pd.read_csv('path_to_csv')
+item_df = pd.read_csv("path_to_csv")
 # ? - Make sure to create a column with the Id index in case that the id's don't start as 0
 item_df["itemId_index"] = item_df["itemId"].astype("category").cat.codes
 item_df.head()
 
-# * - Get the user df 
-user_df = pd.read_csv('path_to_csv')
+# * - Get the user df
+user_df = pd.read_csv("path_to_csv")
 # ? - Remember to factorise all categorical variables !!! - Select those which are relevant
-user_df['gender_index'] = user_df["gender"].astype("category").cat.codes
-user_df['age_index'] = user_df["age"].astype("category").cat.codes
-user_df['occupation_index'] = user_df["occupation"].astype("category").cat.codes
-user_df['userId_index'] = user_df["userId"].astype("category").cat.codes
+user_df["gender_index"] = user_df["gender"].astype("category").cat.codes
+user_df["age_index"] = user_df["age"].astype("category").cat.codes
+user_df["occupation_index"] = user_df["occupation"].astype("category").cat.codes
+user_df["userId_index"] = user_df["userId"].astype("category").cat.codes
 user_df.head()
 
-# * - Get the ratings df and join it with the userId and itemId 
-ratings_df = pd.read_csv('path_to_csv')
+# * - Get the ratings df and join it with the userId and itemId
+ratings_df = pd.read_csv("path_to_csv")
 ratings = ratings.join(item_df.set_index("itemId"), on="movieId")
 ratings = ratings.join(user_df.set_index("userId"), on="userId")
 
-# * - Get the feature columns to prepare for Factor Machines. !!! Don't forget to modify for the real ones. 
-#TODO - Is multi-fesature recommendation systems only relevant when it comes to implicit feedback?
+# * - Get the feature columns to prepare for Factor Machines. !!! Don't forget to modify for the real ones.
+# TODO - Is multi-fesature recommendation systems only relevant when it comes to implicit feedback?
 feature_columns = [
-    'userId_index', 
-    'itemId_index', 
-    'age_index', 
-    'gender_index', 
-    'occupation_index'
+    "userId_index",
+    "itemId_index",
+    "age_index",
+    "gender_index",
+    "occupation_index",
 ]
 
 feature_sizes = {
-    'userId_index': len(ratings['userId_index'].unique()), 
-    'movieId_index': len(ratings['itemId_index'].unique()), 
-    'age_index': len(ratings['age_index'].unique()), 
-    'gender_index': len(ratings['gender_index'].unique()), 
-    'occupation_index': len(ratings['occupation_index'].unique()), 
+    "userId_index": len(ratings["userId_index"].unique()),
+    "movieId_index": len(ratings["itemId_index"].unique()),
+    "age_index": len(ratings["age_index"].unique()),
+    "gender_index": len(ratings["gender_index"].unique()),
+    "occupation_index": len(ratings["occupation_index"].unique()),
 }
 
-# * Set the second order FM model made of three parts: 
-# ? - 1. The offsets: 
+# * Set the second order FM model made of three parts:
+# ? - 1. The offsets:
 next_offset = 0
 feature_offsets = {}
 
 # * This is in order to establish when to pass to the next feature
-for k,v in feature_sizes.items(): 
+for k, v in feature_sizes.items():
     feature_offsets[k] = next_offset
     next_offset += v
 
 # * Map all column indices to start from correct offset
-for column in feature_columns: 
+for column in feature_columns:
     ratings[column] = ratings[column].apply(lambda c: c + feature_offsets[column])
 
-# * - Only visualise the feature columns along with the ratings, because that's what we need for FM. 
-ratings[[*feature_columns, 'rating']].head(5)
+# * - Only visualise the feature columns along with the ratings, because that's what we need for FM.
+ratings[[*feature_columns, "rating"]].head(5)
 
 # * - Initialise the data and split it into train and test
 data_x = torch.tensor(ratings[feature_columns].values)
@@ -892,36 +902,44 @@ bs = 1024
 train_n = int(len(dataset) * 0.9)
 valid_n = len(dataset) - train_n
 splits = [train_n, valid_n]
-assert sum(splits) == len(dataset) # ? - Verify that the split has been done correctly
-trainset, devset = torch.utils.data.random_split(dataset, splits) # ? - Assign the data to each split
+assert sum(splits) == len(dataset)  # ? - Verify that the split has been done correctly
+trainset, devset = torch.utils.data.random_split(
+    dataset, splits
+)  # ? - Assign the data to each split
 train_dataloader = data.DataLoader(trainset, batch_size=bs, shuffle=True)
 dev_dataloader = data.DataLoader(devset, batch_size=bs, shuffle=True)
+
 
 # * Function to fill in a tensor with a 'truncated distribution' -> mean 0, std 1
 # copied from fastai:
 def trunc_normal_(x, mean=0.0, std=1.0):
     """
     Modifies a PyTorch tensor in-place, filling it with random values that approximate a truncated normal distribution.
-    
+
     This function fills the tensor `x` with values drawn from a standard normal distribution, then applies a modulus operation to limit the absolute values, and finally scales and shifts these values to achieve the desired mean and standard deviation. Note that the approach does not strictly adhere to a statistically accurate truncated normal distribution, as it does not cut off values outside a specific range but rather wraps them within a limited range.
-    
+
     Parameters:
     - x (Tensor): The PyTorch tensor to be modified in-place.
     - mean (float, optional): The mean of the distribution after adjustment. Defaults to 0.0.
     - std (float, optional): The standard deviation of the distribution after adjustment. Defaults to 1.0.
-    
+
     Returns:
     - Tensor: The modified tensor `x` with values approximating a truncated normal distribution centered around `mean` and with a standard deviation of `std`. The tensor is modified in-place, so the return value is the same tensor object `x`.
     """
     return x.normal_().fmod_(2).mul_(std).add_(mean)
 
+
 class FMModel(nn.Module):
-    def __init__(self, n, k): # ? - n: Number of unique features. k: Number of latent vectors
+    def __init__(
+        self, n, k
+    ):  # ? - n: Number of unique features. k: Number of latent vectors
         super().__init__()
 
-        self.w0 = nn.Parameter(torch.zeros(1)) # ? - Global bias 
-        self.bias = nn.Embedding(n, 1)         # ? - Embedding layer for bias per feature
-        self.embeddings = nn.Embedding(n, k)   # ? - The actual embedding with dimension k 
+        self.w0 = nn.Parameter(torch.zeros(1))  # ? - Global bias
+        self.bias = nn.Embedding(n, 1)  # ? - Embedding layer for bias per feature
+        self.embeddings = nn.Embedding(
+            n, k
+        )  # ? - The actual embedding with dimension k
 
         # ? - This initialises the embeddings and bias layers with a truncated normal distribution
         # See https://arxiv.org/abs/1711.09160
@@ -930,8 +948,10 @@ class FMModel(nn.Module):
         with torch.no_grad():
             trunc_normal_(self.bias.weight, std=0.01)
 
-    def forward(self, X): # ? - How is the input tensor processed to produce a prediction?
-        emb = self.embeddings(X) # ? - Compute embeddings for the input features 
+    def forward(
+        self, X
+    ):  # ? - How is the input tensor processed to produce a prediction?
+        emb = self.embeddings(X)  # ? - Compute embeddings for the input features
         # ? - emb has shape: [batch_size, num_of_features, k]
         # calculate the interactions in complexity of O(nk) see lemma 3.1 from paper
         pow_of_sum = emb.sum(dim=1).pow(2)
@@ -940,8 +960,10 @@ class FMModel(nn.Module):
         bias = self.bias(X).squeeze().sum(1)
         # I wrap the result with a sigmoid function to limit to be between 0 and 5.5.
         return torch.sigmoid(self.w0 + bias + pairwise) * 5.5
-    #? ^^Returns a sigmoid as the output will be limited between 0 and 1 -> The 5.5 I'm not sure why
-    #? Probably because of the rating prediction.
+
+    # ? ^^Returns a sigmoid as the output will be limited between 0 and 1 -> The 5.5 I'm not sure why
+    # ? Probably because of the rating prediction.
+
 
 # fit/test functions
 def fit(iterator, model, optimizer, criterion):
@@ -966,6 +988,7 @@ def test(iterator, model, criterion):
         loss = criterion(y_hat, y.to(device))
         train_loss += loss.item() * x.shape[0]
     return train_loss / len(iterator.dataset)
+
 
 def train_n_epochs(model, n, optimizer, scheduler):
     criterion = nn.MSELoss().to(device)
@@ -997,4 +1020,4 @@ for epoch in range(epochs):
     print(f"\ttrain rmse: {(math.sqrt(train_loss)):.4f}")
     print(f"\tvalidation rmse: {(math.sqrt(valid_loss)):.4f}")
 
-#TODO: Aprender como ejecutar para coger la recomendación. Too abstract
+# TODO: Aprender como ejecutar para coger la recomendación. Too abstract
