@@ -42,7 +42,7 @@ from cornac.eval_methods import RatioSplit
 from sklearn.metrics import mean_squared_error
 from elasticsearch import Elasticsearch, helpers
 from sklearn.metrics.pairwise import cosine_similarity
-from cornac.models import MF, NMF, BaselineOnly, BPR, WMF, UserKNN, ItemKNN
+from cornac.models import MF, NMF, BaselineOnly, BPR, WMF, UserKNN, ItemKNN, SVD
 #from recommenders.utils.notebook_utils import store_metadata
 #from recommenders.models.cornac.cornac_utils import predict_ranking
 #from recommenders.datasets.python_splitters import python_random_split
@@ -80,9 +80,9 @@ VERBOSE = False
 df_path = "df_path"
 df = pd.read_csv(df_path, header=0)
 
-#!#################################################################
-#!###################         EDA               ###################
-#!#################################################################
+#!##################################################################################################################################
+#!###################         EDA               ####################################################################################
+#!##################################################################################################################################
 
 # * - Preview, Resumen de caracteristicas, num filas x columns. 
 df.head() 
@@ -110,6 +110,7 @@ group_by_and_count = pd.DataFrame(df_sample.groupby("ProductId")["Rating"].count
 sorted_values_by_criteria = group_by_and_count.sort_values("Rating", ascending=False)
 sorted_values_by_criteria.head(10)
 
+#TODO: Añadir table mergeing 
 # * - Obten en array los tipos de datos por columna: 
 data_types = [str(df_sample[column].dtype) for column in df_sample.columns]
 
@@ -170,7 +171,6 @@ def print_sparsity(df):
 
 print_sparsity(df_sample)
 
-#TODO: Haz el caso donde tengamos que unir varias tablas, no solo una!!!
 # * - Obten los productos con mayor número de críticas 
 item_rate_count = df_sample.groupby('ProductId')['UserId'].nunique().sort_values(ascending=False)
 item_rate_count # ? - Get the number of reviews for a product
@@ -220,9 +220,26 @@ df = ratings_matrix
 df['Mean Rating'] = df.mean(axis=1) # ? - Get the mean score for each user 
 sns.histplot(x = 'Mean Rating', binwidth=0.5, data=df) # ? - Histograma de la media de puntuación
 
-#!#################################################################
-#!########## Memory-Based: User-based filtering ###################
-#!#################################################################
+# * PARA PODER HACER ITEM Y USER PROFILING 
+# * User-profiling para User-based
+# ? - Dataset para agrupar los items
+df_user_10k = pd.read_csv('path.csv').set_index('UserId').drop('Timestamp', axis=1)
+items = df_user_10k.groupby('ProductId') # ? - Obtener lista de productos criticados por usuario
+items.get_group('B002OVV7F0') # ? - Pass ProductId - Get the ratings 
+
+# ? - Dataset para agrupar los users
+df_item_10k = pd.read_csv('path.csv').set_index('ProductId').drop('Timestamp', axis=1)
+users = df_item_10k.groupby('UserId') # ? - Obtener lista de usuarios por producto
+users.get_group('A39HTATAQ9V7YF') # ? - Pass UserId - Get the ratings for a user
+
+# ? - Observar distribución ratings producto especifico: 
+df_item_10k.loc['B0050QLE4U'].hist()
+# ? - Observar distribución ratings user especifico: 
+df_user_10k.loc['A39HTATAQ9V7YF'].hist()
+
+#!##################################################################################################################################
+#!########## Memory-Based: User-based filtering Cornac #############################################################################
+#!##################################################################################################################################
 
 #train_df = pd.read_csv(
 #    "ml-100k/u1.base",
@@ -279,17 +296,6 @@ def userknn_cornac(df:pd.DataFrame):
 userknn_models = userknn_cornac(df_sample) # ? - Returns the data with the Metrics
 #?^^Luego tendras que justificar que modelo eliges. Esta bien que cojamos el mean centered (mc)
 
-# * User-profiling para User-based
-# ? - Dataset para agrupar los items
-df_user_10k = pd.read_csv('path.csv').set_index('UserId').drop('Timestamp', axis=1)
-items = df_user_10k.groupby('ProductId') # ? - Obtener lista de productos criticados por usuario
-items.get_group('B002OVV7F0') # ? - Pass ProductId - Get the ratings 
-
-# ? - Dataset para agrupar los users
-df_item_10k = pd.read_csv('path.csv').set_index('ProductId').drop('Timestamp', axis=1)
-users = df_item_10k.groupby('UserId') # ? - Obtener lista de usuarios por producto
-users.get_group('A39HTATAQ9V7YF') # ? - Pass UserId - Get the ratings for a user
-
 # * Función para hacer el perfil del usuario basado en su ID, el df de usuarios, y el modelo user-based (Pearson o cosine seleccionado)
 def user_profiling(UID, model, user_df, TOPK=5):
 
@@ -323,282 +329,221 @@ def uknn_get_scores(UID, model, user_df, TOPK=5):
 
 uknn_get_scores(2, model, df_user_10k)
 
-#!#################################################################
-#!########## Memory-Based: Item-based filtering ###################
-#!#################################################################
+#!###################################################################################################################################
+#!########## Memory-Based: Item-based filtering - Cornac ############################################################################
+#!###################################################################################################################################
+
 # * Predict user's rating for one movie process:
 # * 1. Create a list of the movies which the user 1 has watched and rated.
 # * 2. Rank the similarities between the movies that user 1 has rated and the movie to predict.
 # * 3. Select top n movies with the highest similarity scores.
-# ? 4. Calculate the predicted rating using weighted average of similarity scores and the ratings from user 1.
-# Pick a user ID
-picked_userid = 1
+# * 4. Calculate the predicted rating using weighted average of similarity scores and the ratings from user 1.
 
-# Pick a movie
-picked_movie = "American Pie (1999)"
+# * Función para generar los modelos item-based utilizando Pearson, Cosine, etc... ajustados o no
+def itemknn_cornac(df):
+  df = df.astype({'UserId':object, 'ProductId':object})
+  records = df.to_records(index=False)
+  result = list(records)
+  K = 50  # number of nearest neighbors
+  VERBOSE = False
+  SEED = 42
+  iknn_cosine = ItemKNN(k=K, similarity="cosine", name="ItemKNN-Cosine", verbose=VERBOSE)
+  iknn_cosine_mc = ItemKNN(k=K, similarity="cosine", mean_centered=True, name="ItemKNN-Cosine-MC", verbose=VERBOSE)
+  iknn_pearson = ItemKNN(k=K, similarity="pearson", name="ItemKNN-Pearson", verbose=VERBOSE)
+  iknn_pearson_mc = ItemKNN(k=K, similarity="pearson", mean_centered=True, name="ItemKNN-Pearson-MC", verbose=VERBOSE)
 
-# ? - Normalised dataframe which filters all of the movies which a specific user has watched
-picked_userid_watched = (
-    pd.DataFrame(
-        normalized_ratings_matrix[picked_userid]
-        .dropna(
-            axis=0, how="all"
-        )  # ? Here, we are removing the movies which the user hasn't watched.
-        .sort_values(ascending=False)  # ? Sort the values in descending order
-    )
-    .reset_index()  # ? - Reset the endings
-    .rename(columns={1: "rating"})
-)
+  # Metrics
+  rmse = cornac.metrics.RMSE()
+  mae = cornac.metrics.MAE()
 
-picked_userid_watched.head()
+  ratio_split = RatioSplit(result, test_size=0.2, seed=SEED, verbose=VERBOSE)
+  cornac.Experiment(eval_method=ratio_split,
+                    models=[iknn_cosine, iknn_pearson, iknn_pearson_mc, iknn_cosine_mc],
+                    metrics=[rmse, mae],
+                    ).run()
+  itemknn_models = {'iknn_cosine': iknn_cosine, 'iknn_pearson': iknn_pearson,
+                'iknn_pearson_mc': iknn_pearson_mc, 'iknn_cosine_mc': iknn_cosine_mc}
+  return itemknn_models
 
-# * Now we create a function, with follows four steps:
-# ? - Create a list of movies which the user hasn't watched before.
-# ? - Loop through this list of movies, and create a predicted score for each of these
-# ? - Sort them with the predicted scores first.
-# ? - Select the top k movies as recommendations for the target user.
-def item_based_rec(
-    picked_userid=1, number_of_similar_items=5, number_of_recommendations=3
-):
-    picked_userid_unwatched = pd.DataFrame(
-        normalized_ratings_matrix[picked_userid].isna()  # ? - Get the unwatched movies
-    ).reset_index()
+itemknn_models = itemknn_cornac(df_sample)
 
-    # ? - From the dataset of the unwatched films just get the first column
-    picked_userid_unwatched = picked_userid_unwatched[
-        picked_userid_unwatched[1] == True
-    ]["title"].values.tolist()
+# * Función para hacer el profiling de los items en base al modelo seleccionado y el dataset. Top K. 
+def item_profiling(UID, model, item_df, TOPK=5):
 
-    # ? - Movies which the user has watched
-    picked_userid_watched = (
-        pd.DataFrame(
-            normalized_ratings_matrix[picked_userid]
-            .dropna(axis=0, how="all")
-            .sort_values(ascending=False)
-        )
-        .reset_index()
-        .rename(columns={1: "rating"})  # ? Rename the second column to get the rating.
-    )
+  rating_mat = model.train_set.matrix
 
-    # ? - Dictionary to save the unwatched movie and predicted rating pair
-    rating_prediction = {}
+  UIDX = list(model.train_set.iid_map.items())[UID][0]
 
-    # * Calculate the similarity score of an indiv. movie with the list.
-    for movie in picked_userid_unwatched:
-        picked_movie_similarity_score = (
-            item_similarity_p[[movie]]
-            .reset_index()
-            .rename(columns={picked_movie: "similarity_score"})
-        )
+  print(f"ProductID = {UIDX}")
+  print("-" * 35)
+  print(item_df.loc[UIDX])
 
-        picked_userid_watched_similarity = pd.merge(
-            left=picked_userid_watched,
-            right=picked_movie_similarity_score,
-            on="title",
-            how="inner",
-        ).sort_values("similarity_score", ascending=False)[:number_of_similar_items]
+  ratings = pd.DataFrame(rating_mat.toarray())
+  item_ratings = ratings.iloc[UID]
+  top_rated_items = np.argsort(item_ratings)[-TOPK:]
+  print(f"\nTOP {TOPK} RECOMMENDED USERS FOR ITEM {UID}:")
+  print("-" * 35)
+  print(df_item_10k.iloc[top_rated_items.array])
 
-        # ? - Calculate the predicted rating using weighted average of similarity scores
-        # ? - and the user 1 ratings
-        predicted_rating = round(
-            np.average(
-                picked_userid_watched_similarity["rating"],
-                weights=picked_userid_watched_similarity["similarity_score"],
-            ),
-            6,
-        )
-        # ? Save the predicted rating in the dictionary
-        rating_prediction[picked_movie] = predicted_rating
-    # ? - The key=operator.itemgetter(1), just tells the sorted function to get the rating_prediction second column in desc. order
-    return sorted(rating_prediction.items(), key=operator.itemgetter(1), reverse=True)[
-        :number_of_recommendations
-    ]
+model = itemknn_models.get('iknn_cosine_mc')
+top_rated_items = item_profiling(2, model, df_item_10k)
 
-#!#################################################################
-#!###### Model-based collaborative filtering techniques ###########
-#!#################################################################
-# * Proceed with the steps to obtain the ratings matrix
+# * En caso que quieras una función más especifica a los ratings: (Puedes pasar)
+def itemknn_get_scores(UID, model, item_df, TOPK=5):
+
+    UIDX = list(model.train_set.iid_map.items())[UID][0]
+    recommendations, scores = model.rank(UID)
+    print(f"\nTOP {5} USERS FOR ITEM {UIDX}:")
+    print("Scores:", scores[recommendations[:TOPK]])
+    print(item_df.iloc[recommendations[:TOPK]])
+
+# * Indice del item, modelo seleccionado, y le pasas el dataset
+itemknn_get_scores(3, model, df_item_10k)
+
+#!##################################################################################################################################
+#!###### Model-based collaborative filtering techniques ############################################################################
+#!##################################################################################################################################
+
+# * Asegurate que tienes la matriz del pivotTable de antemano (ratings_matrix)
+# * En caso que no la tengas: 
+#   ratings_matrix = df_sample.pivot_table(
+#       index="UserId",
+#       columns="ProductId",
+#       values="Rating",
+#    )
+
+# * Rellenamos la ratings matrix con la media
 mean_rating = 2.5
-r_df = ratings_df.pivot(index="userId", columns="movieId", values="rating").fillna(
+r_df = ratings_matrix.fillna(
     mean_rating
 )
 
-# ? - Pass the dataframe into a numpy df
+# * Pasamos el df a numpy
 r = r_df.to_numpy()
 
-# ? - Center the ratings by subtracting the overall mean of the matrix
+# * - Centramos los ratings al subtraer la media general de la matriz.
 user_ratings_mean = np.mean(r, axis=1)
 r_centered = r - user_ratings_mean.reshape(-1, 1)
-print(r.shape)  # * Returns dimension
+
+# * - Verificamos que la dimension se ha mantenido al subtraer 
+# * - Multiplica los dos numeros del r.shape y ver si coincide con el count_nonzero
+print(r.shape)  
 print(
     np.count_nonzero(r)
-)  # * This returns the nonzero elements -> Check that all elements are filled in.
-
-#!#################################################################
-#!################ Singular Value Decomp - Non-Cornac #############
-#!#################################################################
-# * Split a the mxn matrix into 3 (Rotation, recaling (+/-), rotation)
-# * Expressed as M = U * Sigma * V^T
-# *     U (mxm) -> Orthonormal columns
-# *     Sigma (mxn) -> Diagonal values
-# *     V (nxn) -> Orthonomal columns
-# * It wouldn't be machine learning if there was no optimisation problem -> In this case it would be matrix completion.
-# TODO - Consider that you may get more than one table
-
-# ? - Σ is a diagonal matrix containing the singular values in descending order.
-u, sigma, v_T = svds(r_centered, k=50)  # Limit to the top 50 components
-sigma = np.diag(sigma)
-matrix_rank(r_centered)  # * To assess the max. number of latent vectors.
-
-# ? - Escogemos el número optimo de latent spaces para el minimo error.
-latents = [3, 10, 20, 30, 40, 50, 150, 300]
-rmse_errors = []
-for latent_dim in latents:
-    U, sigma, v_T = svds(r_centered, k=latent_dim)
-    sigma = np.diag(sigma)  # ? Force it to be diagonal
-    # ? - Reconstruction of the matrix y_app = U*Sigma*Vt + user_mean (We could also add the item mean)
-    r_pred = np.dot(np.dot(U, sigma), v_T) + user_ratings_mean.reshape(-1, 1)
-    r_pred[r_pred < 0] = 0
-    r_pred[r_pred > 5] = 5
-    mse = np.square(np.subtract(r, r_pred)).mean  # ? - MSE formula
-    rmse = math.sqrt(mse)
-    rmse_errors.append(rmse)  # * Add it to the list
-
-# ? - Plot opcional para observar como progresa el SVD
-# ? - Hacemos ahí un elbow method supongo.
-# TODO: Determinar si se debe de escoger un threshold
-plt.xlabel("Latent Dimension")
-plt.ylabel("RMSE")
-plt.plot(latents, rmse_errors, "o-")
-plt.show()
-
-r_pred_df = pd.DataFrame(r_pred)
-r_pred.head()
-
-# * Ways to get all of the recommendations at once by constructing the full matrix
-# Y = U Sigma Vt + mean
-all_user_predicted_ratings = np.dot(np.dot(u, sigma), v_T) + user_ratings_mean.reshape(
-    -1, 1
 )
 
-all_user_predicted_ratings[all_user_predicted_ratings < 0] = 0
-all_user_predicted_ratings[all_user_predicted_ratings > 5] = 5
+#!##################################################################################################################################
+#!################ Singular Value Decomp - CORNAC ##################################################################################
+#!##################################################################################################################################
 
-preds_df = pd.DataFrame(all_user_predicted_ratings, columns=r_df.columns)
-preds_df.head()
+# * - Función para generar el módelo SVD 
+def svd_cornac(df, k_min=10, k_max=2000, step=100):
+  """
+    Ejecuta experimentos SVD para un rango de valores de 'k' sobre un DataFrame utilizando Cornac.
 
+    Devuelve:
+    - (lista, cornac.Experiment): Lista de modelos SVD entrenados y el objeto experimento con los resultados.
 
-# * Function to recommend movies per user.
-# ? - How it works is returning the movies with the highest predicted rating.
-# ? - Consider only the user rating, no title, no genre.
-# TODO - How would we consider more information/other tables.
-def recommend_movies(
-    preds_df, userID, movies_df, original_ratings_df, num_recommendations=5
-):
-    # ? Get the user and their predictions
-    user_row_num = userID - 1
-    sorted_user_predictions = preds_df.iloc[user_row_num].sort_values(ascending=False)
+  """
+  df = df.astype({'UserId':object, 'ProductId':object})
+  records = df.to_records(index=False)
+  result = list(records)
+  
+  VERBOSE = False
+  SEED = 42
 
-    # ? Get the user's data and merge in the movie info to display:
-    user_data = original_ratings_df[original_ratings_df.userId == (userID)]
-    user_full = user_data.merge(
-        movies_df, how="left", left_on="movieId", right_on="movieId"
-    ).sort_values(["rating"], ascending=False)
+  svd_models = []
+  k_values = np.arange(k_min, k_max, step)
+  for k in k_values:
+    svd_models.append(SVD(name='SVD'+str(k), k=k, max_iter=30, learning_rate=0.01, lambda_reg=0.02, verbose=True))
 
-    print(f"User {userID} has already rated {user_full.shape[0]} movies.")
-    print(
-        f"Recommending highest {num_recommendations} predicted ratings movies not already rated."
-    )
+  # Metrics
+  rmse = cornac.metrics.RMSE()
+  mae = cornac.metrics.MAE()
 
-    # Recommend the highest predicted rating movies that the user hasn't seen yet.
-    recommendations = (
-        # ? - Get the films which the user hasn't rated yet and we merge it with the prediction tables.
-        movies_df[~movies_df["movieId"].isin(user_full["movieId"])]
-        .merge(
-            # ? - and we merge it with the prediction tables.
-            pd.DataFrame(sorted_user_predictions).reset_index(),
-            how="left",
-            left_on="movieId",
-            right_on="movieId",
-        )
-        .rename(columns={user_row_num: "Predictions"})
-        .sort_values("Predictions", ascending=False)
-        .iloc[
-            :num_recommendations, :-1
-        ]  # ? - iloc for rows, choosing the highest ones, after sorting
-    )
+  ratio_split = RatioSplit(result, test_size=0.1, seed=SEED, verbose=VERBOSE)
+  svd_experiment = cornac.Experiment(eval_method=ratio_split,
+                    models=svd_models,
+                    show_validation=True,
+                    metrics=[rmse, mae],
+                    )
+  svd_experiment.run()
 
-    return user_full, recommendations
+  return svd_models, svd_experiment
 
+svd_models, svd_experiment = svd_cornac(df_sample, 100, 500, 50)
 
-already_rated, predictions = recommend_movies(preds_df, 29, movies_df, ratings_df)
-df = already_rated[["movieId", "title", "genres"]].copy()
-# df.head(5)
-predictions.head(5)
+# * Función para hacer el plot comparando el número de dimensiones latentes vs. Error RMSE. 
+# * Propósito: Obtener el K óptimo
+def plot_rmse_cornac(experiment, metric_name='RMSE'):
+    metric_values = []
+    names_models = []
+    for i in range(len(experiment.result)):
+        metric_values.append(svd_experiment.result[i].metric_avg_results.get(metric_name))
+        names_models.append(svd_experiment.result[i].model_name)
 
-#!#################################################################
-#!################ Singular Value Decomp - Cornac #################
-#!#################################################################
-#! - Careful with CORNAC, it only accepts its own format of data:
+    plt.xlabel('Latent Dimensions')
+    plt.ylabel('RMSE')
+    plt.title('SVD')
+    plt.plot(names_models, metric_values, 'o-')
+    plt.show()
 
-sample_df = pd.read_csv("csv_path")
-dataset = cornac.data.Dataset.from_uir(sample_df.itertuples(index=False))
+plot_rmse_cornac(svd_experiment)
 
-# ? - Examinar el nivel de error para el número de latentes en la matriz
-# ? - La libreriía Cormac Automáticamente nos lo transforma a una matriz
-ratings = dataset.matrix.A
-user_ratings_mean = np.mean(ratings, axis=1)
-ratings_mask = (ratings > 0).astype(float)  # ? - To make them decimals
+# * En caso de querer hacer un baseline model para SVD - Solo considerando los bias:
+df = df_sample.astype({'UserId':object, 'ProductId':object})
+records = df.to_records(index=False)
+result = list(records)
 
-pd.DataFrame(
-    data=ratings,
-    index=[f"User {u+1}" for u in np.arange(dataset.num_users)],
-    columns=[f"Item {i+1}" for i in np.arange(dataset.num_items)],
-).replace(
-    0, np.nan
-)  # TODO: Is there any case when doing SVD where we would fill the NA's with mean ratings
-
-u, sigma, v_T = np.linalg(ratings, full_matrices=True)
-print(f"Singular values: {sigma.round(3)}")  # ? - Extract all of the elements.
-
-# ? - Creation of the sigma matrix. (Since we only get an array of values)
-Sigma = np.zeros((ratings.shape[0], ratings.shape[1]))
-Sigma[: ratings.shape[0], : ratings.shape[0]] = np.diag(sigma)
-
-# * Choose the number of latent dimensions you want:
-K = 50
-#TODO - u = u[:, :K]? Porque limitamos Sigma, y V pero no U?
-Sigma = Sigma[:, :K]
-v_T = v_T[:K, :]
-
-reconstructed_ratings = u.dot(Sigma.dot(v_T))
-
-rmse = np.sqrt((((ratings - reconstructed_ratings) ** 2) * ratings_mask).mean())
-print(f"\nRMSE = {rmse:.3f}")  # * We multiply by the ratings mask to get the precision
-
-print("Reconstructed matrix:")
-pd.DataFrame(
-    reconstructed_ratings.round(2),
-    index=[f"User {u + 1}" for u in np.arange(dataset.num_users)],
-    columns=[f"Item {i + 1}" for i in np.arange(dataset.num_items)],
+# ? - Instantiate an evaluation method to split data into train and test sets.
+ratio_split = cornac.eval_methods.RatioSplit(
+    data=df_sample.values, test_size=0.1, verbose=True
 )
 
-# TODO: Create the function for the CORNAC Method to get the user recs. as well, not just the matrix
+# ? - Instantiate the models of interest
+bo = cornac.models.BaselineOnly(
+    max_iter=30, learning_rate=0.01, lambda_reg=0.02, verbose=True
+)
 
-#!#################################################################
-#!########################## Matrix Factorisation #################
-#!#################################################################
+# Instantiate evaluation measures
+mae = cornac.metrics.MAE()
+rmse = cornac.metrics.RMSE()
+
+# Instantiate and run an experiment.
+cornac.Experiment(eval_method=ratio_split, models=[bo], metrics=[mae, rmse]).run()
+# ? - Tras ejecutar esto compara con el bloque de arriba
+
+
+# * Función para recomendar a un usuario mediante el indice su producto
+def recommend_products(index, model, data, num_products=5):
+
+    print('Name of Model:', svd_models[n].name) # ? - Sustituir el n, por el indice del modelo con menor RMSE
+    
+    # Rank all test items for a given user.
+    df_rank = pd.DataFrame({'ranked_items': model.rank(index)[0], 'item_scores': model.rank(index)[1]}, 
+                           columns=['ranked_items', 'item_scores'])
+    print('Target UserId', df_sample.iloc[index].UserId) # * Cuidado aqui con el df_smaple
+
+    df_rank.sort_values('item_scores', ascending=False, inplace=True)
+
+    print('Recommended products:', data.iloc[df_rank.head(num_products).ranked_items.values]['ProductId'].values)
+    print('Predicted scoreds: ', df_rank.head(num_products).item_scores.values)
+
+recommend_products(1, svd_models[n], df_sample)
+
+
+#!##################################################################################################################################
+#!########################## Matrix Factorisation ##################################################################################
+#!##################################################################################################################################
 
 # * Factorises the ratings matrix into the product of two lower-rank matrices. "Capturing the low-rank structure of the user-item interactions".
 # * Y (mxn) => P (mxk) & Q^T (kxn), where k << m, n is the latent factor size. So Y^ = PQ^T
 # * P is the user matrix (m -> # of users) -> Rows measure user interest in item chars.
 # * Q is the item matrix (n -> # of items) -> Rows measure item characteristics set.
 
-K = 10
-lbd = 0.01  # ? Lambda -> Regularisation
 # * Option 1 - Single MF model:
 K = 10
-lbd = 0.01
+lbd = 0.01 # ? Lambda -> Regularisation
 mf = MF(
     k=K,
     max_iter=20,
@@ -689,9 +634,9 @@ sns.barplot(x="Factor", y="Variance", data=var_df, palette="ch:.25", ax=ax)
 # );
 
 #TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
-#!#################################################################
-#!########### Non-negative matrix factorisation (NMF) #############
-#!#################################################################
+#!##################################################################################################################################
+#!########### Non-negative matrix factorisation (NMF) ##############################################################################
+#!##################################################################################################################################
 
 # * Variant where the latent factors are constrained to be non-negative
 # * Ideal for non-negative factors like image processing, text mining, and rec. systems. 
@@ -771,9 +716,9 @@ for k in range(K):
 pd.DataFrame(top_genres)
 # TODO: Still don't have it clear how MF and SVD fill in the remaining elements !!!
 
-#!#################################################################
-#!#######   Implicit Feedback - Interaction based     #############
-#!#################################################################
+#!##################################################################################################################################
+#!#######   Implicit Feedback - Interaction based     ##############################################################################
+#!##################################################################################################################################
 #? It compares pairs of items -> Item's the user has interacted with vs. items they haven't. 
 #? Attempts to learn a ranking that predicts the user's preference for the interacted item over the non-interacted one. 
 
@@ -782,9 +727,9 @@ pd.DataFrame(top_genres)
 #? *: Item is not specific comparison => Item is not considered specific comparison (Can't be compared with itself)
 #? ?: Unknown.
 
-#!#################################################################
-#!#######   Bayesian Probability Ratings - Cornac     #############
-#!#################################################################
+#!##################################################################################################################################
+#!#######   Bayesian Probability Ratings - Cornac     ##############################################################################
+#!##################################################################################################################################
 # * Import the data and split into train/test
 data = pd.read_csv('path_to_csv')
 train, test = python_random_split(data, 0.75)
@@ -840,9 +785,9 @@ print(
 )
 warnings.filterwarnings("ignore")
 
-#!#################################################################
-#!###############   Weighted Matrix Factorisation     #############
-#!#################################################################
+#!##################################################################################################################################
+#!###############   Weighted Matrix Factorisation     ##############################################################################
+#!##################################################################################################################################
 
 K = 50
 wmf = WMF(
@@ -877,9 +822,9 @@ cornac.Experiment(eval_method=rs, models=[wmf, mf], metrics=eval_metrics).run() 
 # * However, WMF models are designed to rank items, by fitting binary adoptions. (A click, a purchase, a view)
 # * This is more about showing interest, rather than judging how much they will like it 
 
-#!##########################################################
-#!############# Factorisation Machines (FM) ################
-#!##########################################################
+#!###########################################################################################################################
+#!############# Factorisation Machines (FM) #################################################################################
+#!###########################################################################################################################
 
 if torch.backends.mps.is_available():
     device = torch.device("mps")
@@ -1100,63 +1045,3 @@ print(
     f"The predicted rating for {picked_movie} by user {picked_userid} is {predicted_item_rating}"
 )
 # ?########################?########################?########################?########################?#######################
-
-# ! - User-based Pearson formula: 
-# ! #############################
-# * Calculate the score according to the formula:
-# ? - Case 1: Pearson
-def calculate_score(user_id, item_id):
-    """
-    Understanding the score formula is very important:
-    S(u,i) = r_u + {Sum(r_vi - r_v) * w_uv}/{Sum(w_uv)}
-    Score for user_id, item i = avg user rating + (normalised v rating*similarity weight)/similarity weight
-    Where:
-     * r_u is the user u's average rating
-     * r_vi is the user v's rating on item i
-     * r_v is the user v's average rating
-     * w_uv is the similarity between user's v and u (Done by either Pearson or Cosine)
-
-    """
-
-    # ? Check if the item is in the training dataset:
-    if item_id not in ratings_matrix.columns:  #
-        return 2.5
-
-    similarity_scores = similarity_matrix[user_id].drop(
-        labels=user_id
-    )  # ? Take out the user itself, so that it doesn't self-match
-    normalized_ratings = normalized_ratings_matrix[item_id].drop(
-        index=user_id
-    )  # ? For all of the ratings, take out the user itself
-
-    # ? If none of the other users have rated items in common with the user, return the baseline value:
-    if similarity_scores.isna().all():
-        return 2.5
-
-    total_score = 0
-    total_weight = 0
-    # ? For each item
-    for v in normalized_ratings.index:
-        # ? It's possible for a user to rate the item but not in common with the user in question:
-        if not pd.isna(similarity_scores[v]):
-            total_score += normalized_ratings[v] * similarity_scores[v]
-            total_weight += abs(similarity_scores[v])
-
-    avg_user_rating = ratings_matrix.T.mean()[user_id]
-    return (
-        avg_user_rating + total_score / total_weight
-    )  # ? Adding back the original weight
-
-# * Score testing
-test_ratings = np.array(test_df["rating"])
-user_item_pairs = zip(test_df["user_id"], test_df["item_id"])
-pred_ratings = np.array(
-    [calculate_score(user_id, item_id) for (user_id, item_id) in user_item_pairs]
-)
-print(np.sqrt(mean_squared_error(test_ratings, pred_ratings)))
-
-
-# * Baseline rating - Which is just the mean of all ratings given
-baseline_rating = train_df["rating"].mean()
-baseline_ratings = np.array([baseline_rating for _ in range(test_df.shape[0])])
-print(np.sqrt(mean_squared_error(test_ratings, baseline_ratings)))
