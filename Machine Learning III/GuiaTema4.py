@@ -34,23 +34,24 @@ from scipy.sparse.linalg import svds
 from torch.utils.data import Dataset
 from numpy.linalg import matrix_rank
 from cornac.datasets import movielens
+from matplotlib.cbook import boxplot_stats
 from cornac.eval_methods import RatioSplit
-from recommenders.utils.timer import Timer
-from recommenders.datasets import movielens
-from recommenders.utils.constants import SEED
+#from recommenders.utils.timer import Timer
+#from recommenders.datasets import movielens
+#from recommenders.utils.constants import SEED
 from sklearn.metrics import mean_squared_error
 from elasticsearch import Elasticsearch, helpers
 from sklearn.metrics.pairwise import cosine_similarity
-from cornac.models import MF, NMF, BaselineOnly, BPR, WMF
-from recommenders.utils.notebook_utils import store_metadata
-from recommenders.models.cornac.cornac_utils import predict_ranking
-from recommenders.datasets.python_splitters import python_random_split
-from recommenders.evaluation.python_evaluation import (
-    map,
-    ndcg_at_k,
-    precision_at_k,
-    recall_at_k,
-)
+from cornac.models import MF, NMF, BaselineOnly, BPR, WMF, UserKNN, ItemKNN
+#from recommenders.utils.notebook_utils import store_metadata
+#from recommenders.models.cornac.cornac_utils import predict_ranking
+#from recommenders.datasets.python_splitters import python_random_split
+#from recommenders.evaluation.python_evaluation import (
+#    map,
+#    ndcg_at_k,
+#    precision_at_k,
+#    recall_at_k,
+#)
 
 print(f"System version: {sys.version}")
 print(f"Cornac version: {cornac.__version__}")
@@ -62,7 +63,8 @@ VERBOSE = False
 # * #######################################################################################
 # * #######################################################################################
 # * #######################################################################################
-# * ### Indice (Collaborative Filtering techniques)                                    ####
+# * ### Indice                                                                         ####
+# * ### 0. EDA                                                                         ####
 # * ### 1. Memory-Based Filtering                  (Linea XX)                          ####
 # * ###    a. User-Based Filtering                 (Linea XX)                          ####
 # * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
@@ -81,31 +83,123 @@ df = pd.read_csv(df_path, header=0)
 #!#################################################################
 #!###################         EDA               ###################
 #!#################################################################
-df.head()
+
+# * - Preview, Resumen de caracteristicas, num filas x columns. 
+df.head() 
 df.info()
 df.shape()
-column_unique_values = df["column"].unique()
-number_column_unique_values = df["column"].nunique()
 
-# ? - Agrupación de columnas:
-group_by_and_count = pd.DataFrame(df.groupby("ProductId")["Rating"].count())
+# * - Eliminar columnas 
+df.drop('Timestamp', axis=1, inplace=True)
+
+# * - Ubicar los na's 
+df.isna().sum()
+
+# * - Coger una muestra aleatoria de los datos
+df_sample = df.sample(n=10000, random_state=42)
+
+# ? - Hallar el número de ratings individuales 
+# ? - (Útil para observar proporción y escala)
+df.value_counts('Rating', normalize=True)
+
+column_unique_values = df_sample["column"].unique() # ? - Esto obtiene los valores únicos por col
+number_column_unique_values = df_sample["column"].nunique() # ? - Esto el número de valores únicos
+
+# * - Agrupación de columnas:
+group_by_and_count = pd.DataFrame(df_sample.groupby("ProductId")["Rating"].count())
 sorted_values_by_criteria = group_by_and_count.sort_values("Rating", ascending=False)
 sorted_values_by_criteria.head(10)
 
-# * Take a sample of the dataset
-df_sample = df.sample(n=10000, random_state=42)
+# * - Obten en array los tipos de datos por columna: 
+data_types = [str(df_sample[column].dtype) for column in df_sample.columns]
 
-#TODO: Añade el código aquí del ejercicio 
+# * - Meter info previa en un dataFrame: 
+unique_counts = df_sample.nunique()
+unique_values = [df_sample[column].unique() for column in df_sample.columns]
+data_types = [str(df_sample[column].dtype) for column in df_sample.columns]
+unique_counts_df = pd.DataFrame({'feature': df_sample.columns, 'unique_count': unique_counts, 'unique_values': unique_values, 'data_type': data_types})
+unique_counts_df
 
-# ? - Collaborative Filtering <- WE ARE INTERESTED IN THIS ONE
-# * - Model-based filtering technique <- Clustering, NN, Association, etc...
-# ? Use ML to find user ratings of unrated items: PCA, SVD, Neural nets
-# ? Performance reduction with sparse data.
-# * - Memory-based filtering technique  <- User Based / Item Based <- THIS ONE FOR THE PRACTICAL
-# ? Based on cosine similarity or pearson correlation and taking the avg. of ratings.
-# ? Non-scalable for sparse data.
+# * Función de análisis de outliers de ratings: 
+def explore_outliers(df, num_vars):
+    """
+    Explora y identifica los valores atípicos de variables numéricas en un DataFrame.
 
-# ? - Content-Based Filtering
+    Retorna:
+    - outliers_df (diccionario): Diccionario con las variables numéricas como claves. Cada valor es otro diccionario
+      con las claves 'values' (valores atípicos), 'positions' (posiciones de los valores atípicos en el DataFrame) 
+      e 'indices' (índices de los valores atípicos en el DataFrame).
+    """
+    outliers_df = dict()
+    for k in range(len(num_vars)):
+        var = num_vars[k]
+        sns.boxplot(df, x=var)
+        outliers_df[var] = boxplot_stats(df[var])[0]["fliers"] # ? - Boxplot de TODOS LOS RATINGS EN NUESTRA MUESTRA
+        out_pos = np.where(df[var].isin(outliers_df[var]))[0].tolist() 
+        out_idx = [df[var].index.tolist()[ k ] for k in out_pos]
+        outliers_df[var] = {"values": outliers_df[var], 
+                            "positions": out_pos, 
+                            "indices": out_idx}
+    return outliers_df
+
+# * Obtener los outliers y visualizar el boxplot. 
+outlier_ratings = explore_outliers(df_sample, ['Rating'])
+# * Obtener porcentaje de outliers de nuestra muestra: 
+print(f'Percentage of outliers: {round(len(outlier_ratings.get('Rating').get('indices'))/len(df_sample), 3)*100} %')
+
+# ! - Si hay un sesgo muy claro en el boxplot, NO recomendamos quitar las anomalías para 
+# ! - capturar todos los comportamientos posibles de usuarios. 
+# * En caso de querer quitar los outliers: 
+df_sample.drop(outlier_ratings.get('Rating').get('indices'), inplace=True)
+
+# * - Calculo de Sparsity. Nos dice si nuestro dataset exhibe propiedades long-tail 
+# * - Como de llena esta nuestra matriz de ratings: 
+def print_sparsity(df):
+  n_users = df.UserId.nunique()
+  n_items = df.ProductId.nunique()
+  n_ratings = len(df)
+  rating_matrix_size = n_users * n_items
+  sparsity = 1 - n_ratings / rating_matrix_size
+
+  print(f"Number of users: {n_users}")
+  print(f"Number of items: {n_items}")
+  print(f"Number of available ratings: {n_ratings}")
+  print(f"Number of all possible ratings: {rating_matrix_size}")
+  print("-" * 40)
+  print(f"SPARSITY: {sparsity * 100.0:.2f}%")
+
+print_sparsity(df_sample)
+
+#TODO: Haz el caso donde tengamos que unir varias tablas, no solo una!!!
+# * - Obten los productos con mayor número de críticas 
+item_rate_count = df_sample.groupby('ProductId')['UserId'].nunique().sort_values(ascending=False)
+item_rate_count # ? - Get the number of reviews for a product
+
+# * - Opcional: Plot para observar si hay long tail property: (CUIDADO CON NOMBRES DE COLS)
+popular_products = pd.DataFrame(df_sample.groupby('ProductId')['Rating'].count())
+most_popular = popular_products.sort_values('Rating', ascending=False)
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 5))
+# First plot
+axes[0].bar(x=range(len(item_rate_count)), height=item_rate_count.values, width=5.0, align="edge")
+axes[0].set_xticks([])
+axes[0].set(title="Long tail of rating frequency", 
+            xlabel="Item ordered by decreasing frequency", 
+            ylabel="#Ratings")
+
+# Second plot adaptation
+# Assuming most_popular is a Series. If it's a DataFrame, you might need to adjust this part.
+x_pos = range(len(most_popular.head(30))) # Generate x positions
+axes[1].bar(x=x_pos, height=most_popular.head(30)['Rating'], align="center")
+axes[1].set_xticks(x_pos)
+axes[1].set_xticklabels(most_popular.head(30).index, rotation='vertical')
+axes[1].set(title="Top 30 Most Popular Items", 
+            xlabel="Item", 
+            ylabel="Frequency or some other metric")
+
+plt.tight_layout()
+plt.show()
+
 """
 ! IMPORTANTE, ESTAMOS ASUMIENDO QUE EN CADA TABLA HAY: userId, itemId, rating, timestamp
 ! Asegurate que tienes una chuleta de pandas para eliminar las columnas 
@@ -113,13 +207,22 @@ df_sample = df.sample(n=10000, random_state=42)
 ! Pero por ahora el foco de la asignatura esta con el user-item matrix. No por ejemplo movie genre.
 """
 
+# * Generar la matriz de ratings: 
+ratings_matrix = df_sample.pivot_table(
+    index="UserId",
+    columns="ProductId",
+    values="Rating",
+)
+
+# * EDA de la matriz de ratings: 
+ratings_matrix.head()
+df = ratings_matrix
+df['Mean Rating'] = df.mean(axis=1) # ? - Get the mean score for each user 
+sns.histplot(x = 'Mean Rating', binwidth=0.5, data=df) # ? - Histograma de la media de puntuación
+
 #!#################################################################
 #!########## Memory-Based: User-based filtering ###################
 #!#################################################################
-# * https://medium.com/@corymaklin/memory-based-collaborative-filtering-user-based-42b2679c6fb5
-# As an example, we're going to take the movies dataset
-
-df = pd.read_csv('path_to_csv')
 
 #train_df = pd.read_csv(
 #    "ml-100k/u1.base",
@@ -137,26 +240,10 @@ df = pd.read_csv('path_to_csv')
 #
 #train_df.head()
 
-# * !!!! - Construct the ratings matrix:
-# ? - values -> Cell values | index -> Rows | columns -> Columns
-ratings_matrix = pd.pivot_table(
-    df, values="rating", index="user_id", columns="item_id"
-)
-
 # * Normalise the ratings matrix by subtracting every user's rating by the mean users rating:
 normalized_ratings_matrix = ratings_matrix.subtract(ratings_matrix.mean(axis=1), axis=0)
 
-# ? - Case 1. Pearson Correlation to determine similarity
-similarity_matrix = (
-    ratings_matrix.T.corr()
-)  # * This determines the similarity of each user
-
-# ? - Case 2. Cosine similarity (WE WOULD NOW HAVE TO IMPUTE THE MISSING DATA -> Most common method: Fill in with the user or item average rating)
-# ?           We can proceed with this as long as all of the items have been normalised first.
-# ? - If we want to fill it in with zeroes:
-item_similarity_cosine = cosine_similarity(normalized_ratings_matrix.fillna(0))
-
-# * Función del ejercicio 
+# * Generación de modelos user-based con Pearson, Cosine y centrados
 def userknn_cornac(df:pd.DataFrame):
 
   df = df.astype({'UserId':object, 'ProductId':object})
@@ -189,7 +276,52 @@ def userknn_cornac(df:pd.DataFrame):
   
   return userknn_models
 
-userknn_models = userknn_cornac(amazon_ratings1)
+userknn_models = userknn_cornac(df_sample) # ? - Returns the data with the Metrics
+#?^^Luego tendras que justificar que modelo eliges. Esta bien que cojamos el mean centered (mc)
+
+# * User-profiling para User-based
+# ? - Dataset para agrupar los items
+df_user_10k = pd.read_csv('path.csv').set_index('UserId').drop('Timestamp', axis=1)
+items = df_user_10k.groupby('ProductId') # ? - Obtener lista de productos criticados por usuario
+items.get_group('B002OVV7F0') # ? - Pass ProductId - Get the ratings 
+
+# ? - Dataset para agrupar los users
+df_item_10k = pd.read_csv('path.csv').set_index('ProductId').drop('Timestamp', axis=1)
+users = df_item_10k.groupby('UserId') # ? - Obtener lista de usuarios por producto
+users.get_group('A39HTATAQ9V7YF') # ? - Pass UserId - Get the ratings for a user
+
+# * Función para hacer el perfil del usuario basado en su ID, el df de usuarios, y el modelo user-based (Pearson o cosine seleccionado)
+def user_profiling(UID, model, user_df, TOPK=5):
+
+  rating_mat = model.train_set.matrix
+
+  UIDX = list(model.train_set.uid_map.items())[UID][0]
+
+  print(f"UserID = {UIDX}")
+  print("-" * 35)
+  print(user_df.loc[UIDX])
+
+  ratings = pd.DataFrame(rating_mat.toarray())
+  user_ratings = ratings.loc[UID]
+  top_rated_items = np.argsort(user_ratings)[-TOPK:]
+  print(f"\nTOP {TOPK} RATED ITEMS BY USER {UID}:")
+  print("-" * 35)
+  print(user_df.iloc[top_rated_items.array])
+
+# * Seleccionamos el modelo y ejecutamos la función (Referencia a la función userknn_cornac)
+model = userknn_models.get('uknn_cosine_mc')
+top_rated_items = user_profiling(8, model, df_user_10k)
+
+# * Predicción de score para cualquier producto: 
+def uknn_get_scores(UID, model, user_df, TOPK=5):
+
+    UIDX = list(model.train_set.uid_map.items())[UID][0]
+    recommendations, scores = model.rank(UID)
+    print(f"\nTOP {TOPK} RECOMMENDATIONS FOR USER {UIDX}:")
+    print("Scores:", scores[recommendations[:TOPK]])
+    print(user_df.iloc[recommendations[:TOPK]])
+
+uknn_get_scores(2, model, df_user_10k)
 
 #!#################################################################
 #!########## Memory-Based: Item-based filtering ###################
