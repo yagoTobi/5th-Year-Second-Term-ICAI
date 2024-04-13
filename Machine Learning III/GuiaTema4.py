@@ -66,14 +66,14 @@ VERBOSE = False
 # * #######################################################################################
 # * #######################################################################################
 # * ### Indice                                                                         ####
-# * ### 0. EDA                                                                         ####
-# * ### 1. Memory-Based Filtering                  (Linea XX)                          ####
-# * ###    a. User-Based Filtering                 (Linea XX)                          ####
-# * ###    b. Item-Based Filtering                 (Linea XXX)                         ####
-# * ### 2. Model-Based Collaborative Filtering                                         ####
-# * ###    a. Singular Value Decomposition                                             ####
-# * ###    b. Matrix Factorisation                                                     ####
-# * ### 3. Implicit Feedback                                                           ####
+# * ### 0. EDA                                     (Linea 86)                          ####
+# * ### 1. Memory-Based Filtering                  (Linea 281)                         ####
+# * ###    a. User-Based Filtering                 (Linea 281)                         ####
+# * ###    b. Item-Based Filtering                 (Linea 400)                         ####
+# * ### 2. Model-Based Collaborative Filtering     (Linea 498)                         ####
+# * ###    a. Singular Value Decomposition         (Linea 526)                         ####
+# * ###    b. Matrix Factorisation                  (Linea 652)                        ####
+# * ### 3. Implicit Feedback                       (Linea 880)                         ####
 # * #######################################################################################
 # * #######################################################################################
 # * #######################################################################################
@@ -107,6 +107,7 @@ df.value_counts("Rating", normalize=True)
 column_unique_values = df_sample[
     "column"
 ].unique()  # ? - Esto obtiene los valores únicos por col
+
 number_column_unique_values = df_sample[
     "column"
 ].nunique()  # ? - Esto el número de valores únicos
@@ -176,8 +177,8 @@ print(
 # * En caso de querer quitar los outliers:
 df_sample.drop(outlier_ratings.get("Rating").get("indices"), inplace=True)
 
-
 # * - Calculo de Sparsity. Nos dice si nuestro dataset exhibe propiedades long-tail
+# * - Si el sparsity es alto, yo optaría por hacer Cosine similarity 
 # * - Como de llena esta nuestra matriz de ratings:
 def print_sparsity(df):
     n_users = df.UserId.nunique()
@@ -192,7 +193,6 @@ def print_sparsity(df):
     print(f"Number of all possible ratings: {rating_matrix_size}")
     print("-" * 40)
     print(f"SPARSITY: {sparsity * 100.0:.2f}%")
-
 
 print_sparsity(df_sample)
 
@@ -377,11 +377,6 @@ def user_profiling(UID, model, user_df, TOPK=5):
     print(f"\nTOP {TOPK} RATED ITEMS BY USER {UID}:")
     print("-" * 35)
     print(user_df.iloc[top_rated_items.array])
-
-
-# * Seleccionamos el modelo y ejecutamos la función (Referencia a la función userknn_cornac)
-model = userknn_models.get("uknn_cosine_mc")
-top_rated_items = user_profiling(8, model, df_user_10k)
 
 
 # * Predicción de score para cualquier producto:
