@@ -49,10 +49,10 @@ from recommenders.utils.notebook_utils import store_metadata
 from recommenders.models.cornac.cornac_utils import predict_ranking
 from recommenders.datasets.python_splitters import python_random_split
 from recommenders.evaluation.python_evaluation import (
-   map,
-   ndcg_at_k,
-   precision_at_k,
-   recall_at_k,
+    map,
+    ndcg_at_k,
+    precision_at_k,
+    recall_at_k,
 )
 
 print(f"System version: {sys.version}")
@@ -179,8 +179,9 @@ print(
 # * En caso de querer quitar los outliers:
 df_sample.drop(outlier_ratings.get("Rating").get("indices"), inplace=True)
 
+
 # * - Calculo de Sparsity. Nos dice si nuestro dataset exhibe propiedades long-tail
-# * - Si el sparsity es alto, yo optaría por hacer Cosine similarity 
+# * - Si el sparsity es alto, yo optaría por hacer Cosine similarity
 # * - Como de llena esta nuestra matriz de ratings:
 def print_sparsity(df):
     n_users = df.UserId.nunique()
@@ -195,6 +196,7 @@ def print_sparsity(df):
     print(f"Number of all possible ratings: {rating_matrix_size}")
     print("-" * 40)
     print(f"SPARSITY: {sparsity * 100.0:.2f}%")
+
 
 print_sparsity(df_sample)
 
@@ -696,6 +698,7 @@ cornac.Experiment(eval_method=rs, models=[mf], metrics=[rmse]).run()
 # * As there are no negative factors.
 # * Allows for better interpretabiliy to reason with positive values:
 
+
 def mf_cornac(df, K=10):
     df = df.astype({"UserId": object, "ProductId": object})
     records = df.to_records(index=False)
@@ -789,7 +792,7 @@ sns.barplot(x="Factor", y="Variance", data=var_df, hue="Factor", legend=False, a
 #    [plt.text(*sample_df.loc[i].values, titles[i], size=10) for i in range(len(titles))]
 # );
 
-# ! - Si después quieres hacer un clustering con los datos del MF, procede a ver la última parte de la solución. 
+# ! - Si después quieres hacer un clustering con los datos del MF, procede a ver la última parte de la solución.
 
 # TODO: When is NMF vs. MF relevant? And how about choosing between SVD and MF?
 #!##################################################################################################################################
@@ -1067,6 +1070,7 @@ trainset, devset = torch.utils.data.random_split(
 train_dataloader = data.DataLoader(trainset, batch_size=bs, shuffle=True)
 dev_dataloader = data.DataLoader(devset, batch_size=bs, shuffle=True)
 
+
 # * Function to fill in a tensor with a 'truncated distribution' -> mean 0, std 1
 # copied from fastai:
 def trunc_normal_(x, mean=0.0, std=1.0):
@@ -1157,6 +1161,7 @@ def train_n_epochs(model, n, optimizer, scheduler):
         print(f"epoch {epoch}. time: {secs}[s]")
         print(f"\ttrain rmse: {(math.sqrt(train_loss)):.4f}")
         print(f"\tvalidation rmse: {(math.sqrt(valid_loss)):.4f}")
+
 
 model = FMModel(data_x.max() + 1, 20).to(device)
 wd = 1e-5
