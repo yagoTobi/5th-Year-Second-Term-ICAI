@@ -67,13 +67,15 @@ VERBOSE = False
 # * #######################################################################################
 # * ### Indice                                                                         ####
 # * ### 0. EDA                                     (Linea 86)                          ####
-# * ### 1. Memory-Based Filtering                  (Linea 281)                         ####
+# * ### 1. PCA                                                                         ####
+# * ### 2. Clustering                                                                  ####
+# * ### 3. Memory-Based Filtering                  (Linea 281)                         ####
 # * ###    a. User-Based Filtering                 (Linea 281)                         ####
 # * ###    b. Item-Based Filtering                 (Linea 400)                         ####
-# * ### 2. Model-Based Collaborative Filtering     (Linea 498)                         ####
+# * ### 4. Model-Based Collaborative Filtering     (Linea 498)                         ####
 # * ###    a. Singular Value Decomposition         (Linea 526)                         ####
-# * ###    b. Matrix Factorisation                  (Linea 652)                        ####
-# * ### 3. Implicit Feedback                       (Linea 880)                         ####
+# * ###    b. Matrix Factorisation                 (Linea 652)                         ####
+# * ### 5. Implicit Feedback                       (Linea 880)                         ####
 # * #######################################################################################
 # * #######################################################################################
 # * #######################################################################################
