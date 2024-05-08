@@ -6,3 +6,5 @@ Machine Learning III/T4-Recommendation Systems /ml-100k
 Machine Learning III/T4.2-Recommendation-Implicit/recommenders
 Machine Learning III/T4-Recommendation Systems/logs
 Deep Learning/Práctica Final - ASL/datasets
+*.xlsx
+*.h5
