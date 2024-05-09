@@ -16,9 +16,9 @@ class GRUModel(SequentialBaseModel):
 
     :Citation:
 
-        Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, 
-        Fethi Bougares, Holger Schwenk, and Yoshua Bengio. Learning Phrase 
-        Representations using RNN Encoder-Decoder for Statistical Machine Translation. 
+        Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau,
+        Fethi Bougares, Holger Schwenk, and Yoshua Bengio. Learning Phrase
+        Representations using RNN Encoder-Decoder for Statistical Machine Translation.
         arXiv preprint arXiv:1406.1078. 2014.
     """
 

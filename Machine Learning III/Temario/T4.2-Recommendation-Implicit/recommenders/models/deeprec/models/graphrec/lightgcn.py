@@ -372,9 +372,11 @@ class LightGCN(object):
                 data.col_user: np.repeat(
                     test[data.col_user].drop_duplicates().values, top_items.shape[1]
                 ),
-                data.col_item: top_items.flatten()
-                if use_id
-                else [data.id2item[item] for item in top_items.flatten()],
+                data.col_item: (
+                    top_items.flatten()
+                    if use_id
+                    else [data.id2item[item] for item in top_items.flatten()]
+                ),
                 data.col_prediction: top_scores.flatten(),
             }
         )

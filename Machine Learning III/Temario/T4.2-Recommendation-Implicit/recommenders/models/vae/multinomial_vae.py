@@ -32,7 +32,6 @@ class Metrics(Callback):
     Weights of the model with the highest NDCG@k value is saved."""
 
     def __init__(self, model, val_tr, val_te, mapper, k, save_path=None):
-
         """Initialize the class parameters.
 
         Args:
@@ -138,7 +137,6 @@ class AnnealingCallback(Callback):
     When β reaches the value of anneal_cap, it stops increasing."""
 
     def __init__(self, beta, anneal_cap, total_anneal_steps):
-
         """Constructor
 
         Args:
@@ -210,7 +208,6 @@ class Mult_VAE:
         seed=None,
         save_path=None,
     ):
-
         """Constructor
 
         Args:

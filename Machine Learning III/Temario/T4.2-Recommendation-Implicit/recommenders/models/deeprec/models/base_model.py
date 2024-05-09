@@ -314,9 +314,11 @@ class BaseModel:
         gradients, variables = zip(*train_step.compute_gradients(self.loss))
         if self.hparams.is_clip_norm:
             gradients = [
-                None
-                if gradient is None
-                else tf.clip_by_norm(gradient, self.hparams.max_grad_norm)
+                (
+                    None
+                    if gradient is None
+                    else tf.clip_by_norm(gradient, self.hparams.max_grad_norm)
+                )
                 for gradient in gradients
             ]
         return train_step.apply_gradients(zip(gradients, variables))

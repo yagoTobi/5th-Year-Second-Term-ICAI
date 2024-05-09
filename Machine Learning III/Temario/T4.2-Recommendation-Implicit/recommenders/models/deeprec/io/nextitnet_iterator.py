@@ -156,9 +156,9 @@ class NextItNetIterator(SequentialIterator):
                         item_cate_history_batch[i][-this_length:], dtype=np.int32
                     )
                     mask[i * (batch_num_ngs + 1) + index, -this_length:] = 1.0
-                    time_diff_batch[
-                        i * (batch_num_ngs + 1) + index, -this_length:
-                    ] = np.asarray(time_diff_list[i][-this_length:], dtype=np.float32)
+                    time_diff_batch[i * (batch_num_ngs + 1) + index, -this_length:] = (
+                        np.asarray(time_diff_list[i][-this_length:], dtype=np.float32)
+                    )
                     time_from_first_action_batch[
                         i * (batch_num_ngs + 1) + index, -this_length:
                     ] = np.asarray(
@@ -248,9 +248,9 @@ class NextItNetIterator(SequentialIterator):
                 ][-this_length:]
                 mask[i, -this_length:] = 1.0
                 time_diff_batch[i, -this_length:] = time_diff_list[i][-this_length:]
-                time_from_first_action_batch[
-                    i, -this_length:
-                ] = time_from_first_action_list[i][-this_length:]
+                time_from_first_action_batch[i, -this_length:] = (
+                    time_from_first_action_list[i][-this_length:]
+                )
                 time_to_now_batch[i, -this_length:] = time_to_now_list[i][-this_length:]
 
             res = {}

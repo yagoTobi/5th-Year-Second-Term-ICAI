@@ -4,8 +4,8 @@ import mediapipe as mp
 import numpy as np
 
 # Load the model
-model_dict = pickle.load(open('model.h5', 'rb'))
-model = model_dict['model']
+model_dict = pickle.load(open("model.h5", "rb"))
+model = model_dict["model"]
 
 # Initialize the camera
 cap = cv2.VideoCapture(0)
@@ -85,7 +85,9 @@ while True:
             x_max = min(W, x_max + padding)
             y_max = min(H, y_max + padding)
 
-            if x_max > x_min and y_max > y_min:  # Verificar que la región de la mano tiene dimensiones válidas
+            if (
+                x_max > x_min and y_max > y_min
+            ):  # Verificar que la región de la mano tiene dimensiones válidas
                 # Extract hand region from frame
                 hand_img = frame[y_min:y_max, x_min:x_max]
 
@@ -93,23 +95,34 @@ while True:
                 hand_img_resized = cv2.resize(hand_img, (150, 150))
 
                 # Make prediction using the model
-                prediction = model.predict(np.expand_dims(hand_img_resized, axis=0), verbose=0)
+                prediction = model.predict(
+                    np.expand_dims(hand_img_resized, axis=0), verbose=0
+                )
 
                 # Get predicted character label
                 predicted_character = np.argmax(prediction, axis=1)
 
                 # Draw bounding box and label on the frame
                 cv2.rectangle(frame, (10, 10), (140, 40), (0, 0, 0), -1)
-                cv2.putText(frame, categories[predicted_character[0]], (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(
+                    frame,
+                    categories[predicted_character[0]],
+                    (20, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
 
                 # Display hand region for debugging
-                cv2.imshow('Hand Region', hand_img_resized)
+                cv2.imshow("Hand Region", hand_img_resized)
 
     # Display the frame
-    cv2.imshow('Frame', frame)
+    cv2.imshow("Frame", frame)
 
     # Exit the loop if 'q' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 # Release the camera and close all OpenCV windows

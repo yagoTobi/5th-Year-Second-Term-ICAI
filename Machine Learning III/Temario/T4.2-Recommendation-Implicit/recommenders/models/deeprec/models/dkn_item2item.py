@@ -14,7 +14,8 @@ The tutorial can be found at: https://github.com/microsoft/recommenders/blob/mai
 
 class DKNItem2Item(DKN):
     """Class for item-to-item recommendations using DKN.
-    See https://github.com/microsoft/recommenders/blob/main/examples/07_tutorials/KDD2020-tutorial/step4_run_dkn_item2item.ipynb"""
+    See https://github.com/microsoft/recommenders/blob/main/examples/07_tutorials/KDD2020-tutorial/step4_run_dkn_item2item.ipynb
+    """
 
     def _compute_data_loss(self):
         logits = self.pred

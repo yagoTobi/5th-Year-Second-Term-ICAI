@@ -665,9 +665,9 @@ class RBM:
 
         score_c = score.copy()  # get a copy of the score matrix
 
-        score_c[
-            np.arange(score_c.shape[0])[:, None], top_items
-        ] = 0  # set to zero the top_k elements
+        score_c[np.arange(score_c.shape[0])[:, None], top_items] = (
+            0  # set to zero the top_k elements
+        )
 
         top_scores = score - score_c  # set to zeros all elements other then the top_k
 
